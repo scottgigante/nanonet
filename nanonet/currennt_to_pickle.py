@@ -23,6 +23,8 @@ def get_parser():
         help="Alphabet of kmers to learn.")
     parser.add_argument("--window", type=int, nargs='+', default=[-1, 0, 1],
         help="The detailed list of the entire window.")
+    parser.add_argument("--section", type=str, default='template',
+        help="Section of read which network is trained against.")
     return parser
 
 
@@ -154,6 +156,7 @@ if __name__ == '__main__':
         'window':args.window,
         'n_features':in_network['layers'][0]['size'],
         'kmers':kmers,
+        'section':args.section
     }
 
     network = network_to_numpy(in_network)
