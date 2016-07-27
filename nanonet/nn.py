@@ -740,6 +740,7 @@ void run_softmax(
         barrier(CLK_LOCAL_MEM_FENCE);
         parallel_max(buffer);
         max = max > buffer[0] ? max : buffer[0];
+        barrier(CLK_LOCAL_MEM_FENCE);
     }
     
     for(int x = 0; x < size-1; x += local_size)
@@ -754,6 +755,7 @@ void run_softmax(
         barrier(CLK_LOCAL_MEM_FENCE);
         parallel_sum(buffer);
         sum += buffer[0];
+        barrier(CLK_LOCAL_MEM_FENCE);
     }
     sum += last_in;
     
