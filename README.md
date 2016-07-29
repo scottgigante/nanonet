@@ -27,6 +27,42 @@ only the canonical 1D basecalling library will be compiled; OpenCL acceleration
 of 1D basecalling and any 2D basecalling support will not be configured. See later
 sections of this documented for setting up these components.*
 
+**Requirements**
+
+Nanonet is a python-based commandline suite consisting of several programs for
+performing basecalling with recurrent neural networks. It has been developed
+using 64-bit Python 2.7 available from python.org.
+
+In addition to Python the only required dependencies are h5py and numpy. These can
+be downloaded and installed/compiled automatically, though installing them from your
+system's package repository is generally preferable in the first instance. For Windows
+Christophe Golke maintains a repository of compiled python wheels at:
+
+    http://www.lfd.uci.edu/~gohlke/pythonlibs/
+
+For OSX homebrew is easiest:
+
+    brew tap homebrew/science
+    brew install hdf5
+
+**Easy Windows Installation**
+
+Python wheels for nanonet are available from the github page under the releases
+tab:
+
+    https://github.com/nanoporetech/nanonet-dev/releases
+
+to install these run the following from a command prompt:
+
+    pip install nanonet-2.0.0-cp27-cp27m-win_amd64.whl
+
+The wheel currently enables CPU implementataions of both 1D and 2D calling,
+and additionally the OpenCL implementation of 1D calling. To enable the latter
+please refer to the OpenCL section below. Wheels for other platforms may be made
+available in the future.
+
+**Setup**
+
 The basecalling component of nanonet should install quite trivially using the
 standard python mechanism on most platforms:
 
@@ -39,20 +75,9 @@ C++ Compiler for Python 2.7 from:
 
     https://www.microsoft.com/en-gb/download/details.aspx?id=44266
 
-The only required dependencies are h5py and numpy. These can be downloaded and
-installed/compiled automatically though installing them from your system's
-package repository is generally preferable in the first instance. For Windows
-Christophe Golke maintains a repository of compiled python wheels at:
-
-    http://www.lfd.uci.edu/~gohlke/pythonlibs/
-
-For OSX homebrew is easiest:
-
-    brew tap homebrew/science
-    brew install hdf5
-
-See the full installation instructions for further details, where instructions
-to perform a binary installation under Ubuntu can also be found.
+Most of these documentation assume you are using this compiler on Windows. The
+section **Compiling with MinGW-w64** explains how to use GCC based compilation
+on Windows.
 
 **Optional Watcher Component**
 
@@ -62,8 +87,11 @@ install it run
 
     pip install -e  .[watcher]
 
-from the source directory. This will allow use of the `--watch` option of the
-basecaller.
+from the source directory, or simply
+
+    pip install watchdog
+
+for any location. This will allow use of the `--watch` option of the basecaller.
 
 
 Peforming basecalling
@@ -150,7 +178,11 @@ i.e. the file available here:
     https://sourceforge.net/projects/boost/files/boost-binaries/1.55.0/boost_1_55_0-msvc-9.0-64.exe/download
     
 The above installer will by default install boost to `c:\local\boost_1_55_0`. If
-you change this path you will also need to edit the `setup.py` file in nanonet.
+you change this path you will also need to edit the `setup.py` file in nanonet. To run
+the 2D basecaller you will need also to add the library location to your `Path` environment
+variable. In Windows Powershell this can be done with:
+
+    $env:Path += ";c:\local\boost_1_55_0\lib64-msvc-9.0"
 
 Once you have installed boost on your OS, the 2D basecalling components can be
 compiled and set up with:
@@ -164,7 +196,7 @@ a basic use would simply require:
     nanonet2d sample_data calls
     
 The second option here specifies a prefix for output fasta files; three files will be
-created, one each for template, complement and 2D basecalls.
+created: one each for template, complement and 2D basecalls.
 
 
 OpenCL Support
@@ -199,6 +231,11 @@ experiment with this option and the `--jobs` option to achieve optimal throughpu
 
 **2D Acceleration**
 
+To enable OpenCL acceration on 2D basecalling it is necessary to compile additional
+components during the setup of nanonet by using the `opencl2d` argument:
+
+    python setup.py install opencl2d
+
 With a working OpenCL runtime and development environment 2D basecalling can be accelerated
 by simply adding and option on the commandline:
 
@@ -207,6 +244,57 @@ by simply adding and option on the commandline:
 The program will automatically choose an OpenCL device to use, giving preference
 to GPU devices over CPU ones. It is not currently possible to use OpenCL acceleration for
 the 1D basecalling necessary for performing a 2D basecall.
+
+Compiling with MinGW-w64
+------------------------
+
+The Microsoft Visual C++ Compiler for Python 2.7 compiler is fairly old and can
+produce less than efficient code compared to more recent compilers. The
+following describes how one may instead compile nanonet using MinGW. This process
+is not recommended for those unfamiliar with compilation toolchains. We use
+specific, but not the latest, versions of MinGW and Boost in what follows. Be
+aware that these instructions may not work with later versions of these tools.
+
+First download the following build of MinGW-w64:
+
+    https://sourceforge.net/projects/mingwbuilds/files/host-windows/releases/4.8.1/64-bit/threads-posix/seh/x64-4.8.1-release-posix-seh-rev5.7z/download
+
+together with Boost 1.55.0:
+
+    https://sourceforge.net/projects/boost/files/boost/1.55.0/boost_1_55_0.7z/download
+    
+The files are packaged with 7zip, which you should install if you haven't
+previously. Extract both of the packages to:
+
+    C:\local\
+
+Open Windows Powershell and run the following to build the boost-python library:
+
+    $env:Path += ';C:\local\mingw64\bin'
+    cd c:\local\boost_1_55_0\
+    .\bootstrap.bat gcc
+    .\b2.exe toolset=gcc address-model=64 link=shared define=MS_WIN64 --with-python stage
+    
+The `distutils` module of Python 2.7 supports using MinGW as a compiler,
+although unfortunately it is likely to cause .dlls to be incorrectly
+linked when using MinGW-w64. For this reason and to streamline the build
+process, nanonet patches the class `distutils.cygwinccompiler.Mingw32CCompiler`
+with its own version and manipulates some `distutils` internals in order
+to force use of this class when a users elects to use MinGW-w64. All this
+means is that to compile and setup an in-place (development) install of
+nanonet run:
+
+    python setup.py develop --user with2d mingw
+
+If you have and existing MinGW-w64 setup you can use the environment
+variables `BOOST_ROOT`, `BOOST_LIB`, and `BOOST_PYTHON` to specify
+respectively the location of you boost install, relative location of
+the boost libraries, and the name of your boost-python library. For
+example the defaults are:
+
+    BOOST_ROOT  = "c:\local\boost_1_55_0\"
+    BOOST_LIB   = "stage\lib"
+    BOOST_PYTON = "boost_python-mgw48-mt-1_55"
 
 
 Training a network

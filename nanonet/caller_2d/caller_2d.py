@@ -18,6 +18,7 @@ from math import ceil, floor
 from nanonet.caller_2d.viterbi_2d import viterbi_2d
 from nanonet.util import all_kmers, rc_kmer, kmers_to_sequence, kmer_overlap
 from nanonet.caller_2d.align_kmers import align_basecalls
+from nanonet.nanonetcall import get_qdata, form_basecall
 
 try:
     from nanonet.caller_2d.viterbi_2d_ocl import viterbi_2d_ocl
@@ -32,6 +33,7 @@ def init_opencl_device(cpu_id=0):
 
     vendors, error = proxy_cl.available_vendors()
     if error or not vendors:
+        print "Error establishes OpenCL vendors"
         return None
 
     # Initially choose the first vendor from the list.
@@ -47,21 +49,23 @@ def init_opencl_device(cpu_id=0):
             active_vendor = opencl_vendor.amd
         elif opencl_vendor.intel in vendors:
             active_vendor = opencl_vendor.intel
-
+        elif opencl_vendor.apple in vendors:
+            active_vendor = opencl_vendor.apple
     ret, error = proxy_cl.select_vendor(active_vendor)
     if not ret or error:
-        return None
-
+         print "Error selecting OpenCL vendor"
+         return None
     opencl_device_type = viterbi_2d_ocl.device_type
 
     devices, error = proxy_cl.available_devices()
     if error or not devices:
+        print "Error establishes OpenCL devices"
         return None
 
     if len(devices) == 1:
         ret, error = proxy_cl.select_device(devices[0].id)
         if ret and not error:
-            # print "Selected OpenCL device:", devices[0].type, devices[0].name # TODO: remove or log to log file.
+            #print "Selected OpenCL device:", devices[0].type, devices[0].name # TODO: remove or log to log file.
             ret, error = proxy_cl.create_context()
             if not ret or error:
                 print "Error creating context for device"
@@ -74,7 +78,7 @@ def init_opencl_device(cpu_id=0):
             device_to_use = cpu_id % len(dev_lst)
             ret, error = proxy_cl.select_device(dev_lst[device_to_use])
             if ret and not error:
-                # print "Selected OpenCL device", cpu_id, device_to_use, devices[device_to_use].type, devices[device_to_use].name
+                #print "Selected OpenCL device", cpu_id, device_to_use, devices[device_to_use].type, devices[device_to_use].name
                 # TODO: remove or log to log file.
                 ret, error = proxy_cl.create_context()
                 if not ret or error:
@@ -86,7 +90,7 @@ def init_opencl_device(cpu_id=0):
         if dev_lst:
             ret, erro = proxy_cl.select_device(dev_lst[0])
             if ret and not error:
-                print "Selected OpenCL device:", devices[0].type, devices[0].name # TODO: remove or log to log file
+                #print "Selected OpenCL device:", devices[0].type, devices[0].name # TODO: remove or log to log file
                 ret, error = proxy_cl.create_context()
                 if not ret or error:
                     print "Error creating context for device."
@@ -94,7 +98,7 @@ def init_opencl_device(cpu_id=0):
                 return proxy_cl
         ret, error = proxy_cl.select_device(devices[0].id)
         if ret and not error:
-            print "Selected OpenCL device:", devices[0].type, devices[0].name # TODO: remove or log to log file
+            #print "Selected OpenCL device:", devices[0].type, devices[0].name # TODO: remove or log to log file
             ret, error = proxy_cl.create_context()
             if not ret or error:
                 print "Error creating context for device."
@@ -252,14 +256,13 @@ def call_aligned_pair(posts, transitions, alignment, allkmers, call_band=15,
     :rtype: tuple or None
 
     """
-    
     # Init opencl
     proxy_cl = None
     if use_opencl:
         proxy_cl = init_opencl_device(cpu_id)
         if not proxy_cl:
             return None
-    
+ 
     # Prepare models and transitions for the viterbi_2d code.
     trans = transitions[0] + transitions[1]
     num_states = len(allkmers)
@@ -287,7 +290,6 @@ def call_aligned_pair(posts, transitions, alignment, allkmers, call_band=15,
         viterbi = viterbi_2d_ocl.Viterbi2Docl(proxy_cl)
         viterbi.init_data(state_info, params)
         # Initialize opencl kernel specifics
-        enable_fp64 = True # whether to offload double floating point calculations to GPU
         work_group_size = 0 # when set to 0 max device available will be used
         src_kernel_dir = os.path.dirname(viterbi_2d_ocl.__file__)
         bin_kernel_dir = os.path.join(os.path.expanduser('~'), '.nanonet_opencl')
@@ -295,10 +297,14 @@ def call_aligned_pair(posts, transitions, alignment, allkmers, call_band=15,
             os.makedirs(bin_kernel_dir)
         except:
             pass
+
+        enable_fp64 = True # whether to offload double floating point calculations to GPU
         ret, error = viterbi.init_cl(src_kernel_dir, bin_kernel_dir, enable_fp64, num_states, work_group_size)
         if not ret or error:
-            print error
-            return None
+            enable_fp64 = False
+            ret, error = viterbi.init_cl(src_kernel_dir, bin_kernel_dir, enable_fp64, num_states, work_group_size)
+            if not ret or error:
+                return None
 
     alignment_overlap = max(int(1.5 * call_band), 20)
     data_overlap = max(call_band, 10)
@@ -330,7 +336,6 @@ def call_aligned_pair(posts, transitions, alignment, allkmers, call_band=15,
         com_chunk_start = chunker.chunk_complement_starts[chunk]
         com_chunk_end = chunker.chunk_complement_ends[chunk] + 1
 
-        # TODO: change this to slice of posterior
         post1 = posts[0][tmp_chunk_start+temp_start:tmp_chunk_end+temp_start, :].copy()
         post2 = posts[1][com_chunk_start+comp_start:com_chunk_end+comp_start, :]
         post2 = post2[::-1, rc_order].copy()
@@ -357,6 +362,8 @@ def call_aligned_pair(posts, transitions, alignment, allkmers, call_band=15,
         sequence = kmers_to_sequence(chunk_kmers)
         if len(sequence) < len(align_in) / 3:
             return None
+
+        merged_qdata = make_aligned_qdata(post1, post2, chunk_align_out, allkmers)
         
         for i, item in enumerate(chunk_align_out):
             x0 = item[0]
@@ -395,14 +402,20 @@ def call_aligned_pair(posts, transitions, alignment, allkmers, call_band=15,
                 chunk_align_out[i] = (chunk_align_out[i][0] + tmp_chunk_start, chunk_align_out[i][1] + com_chunk_start)
 
         # Accumulate results from chunk.
+        qdata.append(merged_qdata[:pos,:])
         new_alignment[cum_pos:cum_pos+pos] = chunk_align_out[:pos]
         kmers.extend(chunk_kmers[:pos])
         cum_pos += pos
 
-    out_kmers = kmers[0:cum_pos]
-    out_sequence = kmers_to_sequence(out_kmers) 
     out_align = new_alignment[0:cum_pos]
     check_alignment(temp_end - temp_start + 1, comp_end - comp_start + 1, out_align)
+    # finalised qscore data and form basecall
+    qdata = merge_qdata(qdata)
+    kmer_map = {k:i for i,k in enumerate(allkmers)}
+    states = [kmer_map[k] for k in kmers[0:cum_pos]]
+    out_sequence, out_qstring, out_kmers = form_basecall(
+        qdata, allkmers, states, qscore_correction='2d'
+    ) 
 
     # Adjust alignment so indexes refer to full non-trimmed data sets.
     for i, align in enumerate(out_align):
@@ -411,7 +424,42 @@ def call_aligned_pair(posts, transitions, alignment, allkmers, call_band=15,
         if align['pos1'] != -1:
             out_align[i]['pos1'] += comp_start
             
-    return out_sequence, out_kmers, out_align
+    return out_sequence, out_qstring, out_kmers, out_align
+
+
+def make_aligned_qdata(post1, post2, alignment, kmers):
+    post = np.empty((len(alignment), post1.shape[1]), dtype=post1.dtype)
+    for pos in range(len(alignment)):
+        pos0 = alignment[pos][0]
+        pos1 = alignment[pos][1]
+        temp = None
+        comp = None
+        if pos0 != -1:
+            temp = post1[pos0,:]
+        if pos1 != -1:
+            comp = post2[pos1,:]
+        if temp is None:
+            post[pos,:] = comp
+        elif comp is None:
+            post[pos,:] = temp
+        else:
+            prod = temp * comp
+            nrm = 1.0 / np.sum(prod)
+            post[pos,:] = prod * nrm
+    qdata = get_qdata(post, kmers)
+    return qdata
+
+
+def merge_qdata(qdata_list):
+    n = 0
+    for block in qdata_list:
+        n += block.shape[0]
+    qdata = np.empty((n, block.shape[1]), dtype=block[0].dtype)
+    p = 0
+    for block in qdata_list:
+        qdata[p:p+block.shape[0],:] = block
+        p += block.shape[0]
+    return qdata
 
 
 def call_2d(posts, kmers, transitions, allkmers, call_band=15, chunk_size=500, use_opencl=False, cpu_id=0):
@@ -441,12 +489,12 @@ def call_2d(posts, kmers, transitions, allkmers, call_band=15, chunk_size=500, u
             raise failed_alignment
 
     try:
-        sequence, out_kmers, out_align = call_aligned_pair(
+        sequence, out_kmers, out_align, trimmed_align = call_aligned_pair(
             posts, transitions, alignment, allkmers, call_band=call_band,
             chunk_size=chunk_size, use_opencl=use_opencl, cpu_id=cpu_id)
     except Exception as e:
         raise failed_call
 
-    return sequence, out_kmers, out_align 
+    return sequence, out_kmers, out_align, trimmed_align
 
 
