@@ -601,9 +601,9 @@ void run_dot(
     int local_size = get_local_size(0);
     int group_id = get_group_id(0);
     
-    FPTYPE vW = 0.0FSUF;
     for(int x = 0; x < iWy; x += local_size)
     {
+        FPTYPE vW = 0.0FSUF;
         for(int y = 0; y < iWx; ++y)
             vW += inMat[group_id*iWx + y] * iW[y*iWy + local_id + x];
         outvW[group_id*iWy + local_id + x] = vW;
