@@ -1,7 +1,7 @@
 import sys
 import os
 import time
-from itertools import tee, imap, izip, izip_longest, product, cycle, islice, chain
+from itertools import tee, imap, izip, izip_longest, product, cycle, islice, chain, repeat
 from functools import partial
 from multiprocessing import Pool
 import random
@@ -86,6 +86,55 @@ def com(k):
 def rc_kmer(seq):
     """ Return reverse complement of a string (base) sequence. """
     return reduce(lambda x,y: x+y, map(com, seq[::-1]))
+
+
+def reverse_complement(seq):
+    """ Return reverse complement of a string (base) sequence. """
+    return rc_kmer(seq)
+
+
+def shotgun_library(seq, mu, sigma, direction=(1,-1)):
+    """Generate random fragment sequences of a given input sequence
+
+    :param seq: input sequence.
+    :param mu: mean fragment length.
+    :param sigma: stdv of fragment length.
+    :param direction: tuple represention direction of output sequences with
+        respect to the input sequence.
+
+    .. note:: Could be made more efficient using buffers for random samples
+        and handling cases separately.
+    """
+    seq_len = len(seq)
+    while True:
+        start = np.random.randint(0, seq_len)
+        frag_length = int(np.random.normal(mu, sigma))
+        move = np.random.choice(direction)
+        end = max(0, start + move*frag_length)
+        start, end = sorted([start, end])
+
+        if end - start < 2:
+            # Expand a bit to ensure we grab at least one base.
+            start = max(0, start - 1)
+            end += 1
+
+        frag_seq = seq[start:end]
+        if move == -1:
+            frag_seq = reverse_complement(frag_seq)
+        yield frag_seq
+
+
+def seq_to_kmers(seq, length):
+    """ Turn a string into a list of (overlapping) kmers.
+
+    e.g. perform the transformation:
+
+    'ATATGCG' => ['ATA','TAT', 'ATG', 'TGC', 'GCG']
+
+    :param seq: character string
+    :param length: length of kmers in output
+    """
+    return [seq[x:x+length] for x in range(0, len(seq)-length + 1)]
 
 
 def kmers_to_annotated_sequence(kmers):
@@ -242,6 +291,11 @@ def group_by_list(iterable, group_sizes):
         except StopIteration:
             break
         yield list(chain((first_el,), chunk_it))
+
+
+def ncycles(iterable, n):
+    "Returns the sequence elements n times"
+    return chain.from_iterable(repeat(tuple(iterable), n))
 
 
 class AddFields(object):

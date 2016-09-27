@@ -211,7 +211,8 @@ requires=[
 extra_requires = {
     'currennt': ['netCDF4'],
     'watcher': ['watchdog'],
-    'opencl': ['pyopencl']
+    'opencl': ['pyopencl'],
+    'simulate': ['biopython'],
 }
 
 
@@ -232,7 +233,6 @@ if system == 'Windows' and "bdist_wheel" in sys.argv:
     mingwlibs = glob(os.path.join(mingwdir,'*.dll'))
     mingwlibs = [os.path.join(mingwdir, x) for x in mingwlibs]
     dlls = [os.path.relpath(x) for x in blibs + mingwlibs]
-    print dlls
     bdist_args = {
         'scripts':dlls,
         'distclass':BinaryDistribution
@@ -260,7 +260,8 @@ setup(
         'console_scripts': [
             'nanonetcall = nanonet.nanonetcall:main',
             'nanonet2d = nanonet.nanonetcall_2d:main',
-            'nanonettrain = nanonet.nanonettrain:main'
+            'nanonettrain = nanonet.nanonettrain:main',
+            'simulate_minion = nanonet.simulate.simulate_minion:main',
         ]
     },
     **bdist_args
