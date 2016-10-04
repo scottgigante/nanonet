@@ -141,7 +141,7 @@ def process_read_2d(modelfiles, fast5, min_prob=1e-5, trans=None, write_events=T
 
             results['2d'] = (sequence, qstring), time_2d
             if write_events:
-                write_to_file(fast5, sequence, qual, out_align)
+                write_to_file(fast5, sequence, qstring, out_align)
 
     for section in sections:
         if results[section] is not None:
@@ -159,7 +159,7 @@ def write_to_file(fast5, seq, qual, alignment):
            name = fh.filename_short
        fh._add_string_dataset(
            '@{}\n{}\n+\n{}\n'.format(name, seq, qual),
-           fh._join(path(base, 'Fastq')))
+           fh._join_path(base, 'Fastq'))
 
 
 def main():
