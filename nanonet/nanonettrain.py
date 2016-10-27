@@ -118,8 +118,15 @@ def main():
         'window':args.window,
         'kmer_len':args.kmer_length,
         'alphabet':args.bases,
-        'callback_kwargs':{'section':args.section, 'kmer_len':args.kmer_length}
+        'chunk_size':350,
+        'min_chunk':150,
+        'trim':100,
+        'callback_kwargs':{
+            'section':args.section, 'kmer_len':args.kmer_length,
+            'hdf_path':'/Analyses/Squiggle_Map_000/SquiggleMapped_template/Events'
+        }
     }
+    print "Preparing dataset with:\n", fix_kwargs
     for results in tang_imap(prepare_input_file, inputs, fix_kwargs=fix_kwargs, threads=2):
         n_chunks, n_features, out_kmers = results
         if n_chunks == 0:

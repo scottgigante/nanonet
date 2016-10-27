@@ -85,10 +85,15 @@ def make_basecall_input_multi(fast5_files, section='template', window=[-1, 0, 1]
             if event_detect:
                 # These parameters make no sense to me, but hey-ho
                 # TODO: expose to user
+                #events = minknow_event_detect(
+                #    fh.get_read(raw=True), fh.sample_rate,
+                #    window_lengths=[5, 10], thresholds=[2.0, 1.1],
+                #    peak_height=1.2
+                #)
                 events = minknow_event_detect(
                     fh.get_read(raw=True), fh.sample_rate,
-                    window_lengths=[5, 10], thresholds=[2.0, 1.1],
-                    peak_height=1.2
+                    window_lengths=[3, 6], thresholds=[1.4,1.1],
+                    peak_height=0.2
                 )
             else:
                 events = fh.get_read()
@@ -118,18 +123,21 @@ def chunker(array, chunk_size):
         yield array[i:i+chunk_size]
 
 
-def get_events_ont_mapping(filename, kmer_len=3, section='template'):
+def get_events_ont_mapping(filename, kmer_len=3, section='template', hdf_path=None):
     """Scrape event-alignment data from .fast5
     
     :param filename: input file.
     :param section: template or complement
     """
     with Fast5(filename) as fh:
-        events, _ = fh.get_any_mapping_data(section=section)
+        if hdf_path is None:
+            events, _ = fh.get_any_mapping_data(section=section)
+        else:
+            events = fh[hdf_path][()]
     return events
 
 
-def get_labels_ont_mapping(filename, kmer_len=3, section='template'):
+def get_labels_ont_mapping(filename, kmer_len=3, section='template', hdf_path=None):
     """Scrape kmer labels from .fast5 file.
 
     :param filename: input file.
@@ -138,8 +146,10 @@ def get_labels_ont_mapping(filename, kmer_len=3, section='template'):
     """
     bad_kmer = 'X'*kmer_len
     with Fast5(filename) as fh:
-        # just get template mapping data
-        events, _ = fh.get_any_mapping_data(section=section)
+        if hdf_path is None: 
+            events, _ = fh.get_any_mapping_data(section=section)
+        else:
+            events = fh[hdf_path][()]
         base_kmer_len = len(events['kmer'][0])
         if base_kmer_len < kmer_len:
             raise ValueError(
@@ -180,9 +190,15 @@ def make_currennt_training_input_multi(fast5_files, netcdf_file, window=[-1, 0, 
     # We need to know ahead of time how wide our feature vector is,
     #    lets generate one and take a peek. Check also callbacks
     #    produce meaningful data.
-    X = events_to_features(get_events(fast5_files[0], **callback_kwargs), window=window)
-    labels = get_labels(fast5_files[0], **callback_kwargs)
-    inputPattSize = X.shape[1]
+    for i in xrange(len(fast5_files)):
+        try:
+            X = events_to_features(get_events(fast5_files[i], **callback_kwargs), window=window)
+            labels = get_labels(fast5_files[i], **callback_kwargs)
+            inputPattSize = X.shape[1]
+            break
+        except Exception as e:
+            print e
+            del fast5_files[i]
     if len(X) != len(labels):
         raise RuntimeError('Length of features and labels not equal.')
     
