@@ -301,6 +301,136 @@ example the defaults are:
     BOOST_PYTON = "boost_python-mgw48-mt-1_55"
 
 
+Benchmarks
+----------
+
+The results below are indicative and provided for reference only. The
+performance of nanonet should not be assumed to be equal to that of
+a production implementation.
+
+**AWS g2.2xlarge Ubuntu 16.04 Xeon E5-2670 @ 2.60GHz**
+- numpy is linked to a multithreaded blas, it appears
+  best to set the number of threads to 1.
+- 1D performance scales nicely with number of CPU processes
+- 1D GPU performance is rough 4.5X for single concurrent kernel
+  or approaching 6.5X for ten concurrent kernels.
+- 2D GPU performance is 7X.
+
+*1D basecalling*
+
+    $ nanonetcall more_sample_data/ > /dev/null
+    Basecalled 20 reads (30160 bases, 62600 events) in 39.9055719376s (wall time)
+    Run network:  23.59 ( 1.278 kb/s,  2.653 kev/s)
+    Decoding:     14.53 ( 2.076 kb/s,  4.308 kev/s)
+    $
+    $ OMP_NUM_THREADS=1 nanonetcall more_sample_data/ > /dev/null
+    Basecalled 20 reads (30160 bases, 62600 events) in 30.2339270115s (wall time)
+    Run network:  13.78 ( 2.189 kb/s,  4.544 kev/s)
+    Decoding:     14.74 ( 2.046 kb/s,  4.247 kev/s)
+    $
+    $ OMP_NUM_THREADS=1 nanonetcall more_sample_data/ --jobs 4 > /dev/null
+    Basecalled 20 reads (30160 bases, 62600 events) in 7.72924900055s (wall time)
+    Run network:  13.84 ( 2.180 kb/s,  4.525 kev/s)
+    Decoding:     15.00 ( 2.011 kb/s,  4.174 kev/s)
+    $
+    $ OMP_NUM_THREADS=1 nanonetcall more_sample_data/ --platforms nvidia:0:1 --exc_opencl > /dev/null
+    Basecalled 20 reads (30160 bases, 62600 events) in 8.73325586319s (wall time)
+    Run network:   3.83 ( 7.868 kb/s, 16.331 kev/s)
+    Decoding:      1.54 (19.623 kb/s, 40.730 kev/s)
+
+*2D basecalling*
+
+    $ OMP_NUM_THREADS=1 nanonet2d more_sample_data calls
+    Processed 20 reads in 214.572195053s (wall time)
+    Template Run network:  14.01 ( 2.153 kb/s,  4.469 kev/s)
+    Template Decoding:     15.76 ( 1.914 kb/s,  3.973 kev/s)
+    2D calling:           156.85 ( 0.188 kb/s)
+    $
+    $ OMP_NUM_THREADS=1 nanonet2d more_sample_data calls --opencl_2d
+    Processed 20 reads in 78.750191927s (wall time)
+    Template Run network:  13.92 ( 2.167 kb/s,  4.498 kev/s)
+    Template Decoding:     15.50 ( 1.946 kb/s,  4.038 kev/s)
+    2D calling:            21.72 ( 1.355 kb/s)
+
+**Intel NUC5i7RYH Ubuntu 14.04 i7-5557U CPU @ 3.10GHz**
+- Again CPU performance better with single threaded blas
+- 1D CPU marginally better than AWS machine, though relative
+  speed of network and coding altered.
+- Two physical cores: performance with 4 processes not
+  significantly faster than 2.
+- 1D Iris 6100 roughly 3.5X over CPU core. Concurrent kernel
+  execution is not handled well.
+- 2D GPU 5X over CPU.
+
+*1D basecalling*
+
+    $ nanonetcall more_sample_data/ > /dev/null
+    Basecalled 20 reads (30160 bases, 62600 events) in 34.7250430584s (wall time)
+    Run network:  16.35 ( 1.845 kb/s,  3.829 kev/s)
+    Decoding:     16.26 ( 1.855 kb/s,  3.851 kev/s)
+    $
+    $ OMP_NUM_THREADS=1 nanonetcall more_sample_data/ > /dev/null
+    Basecalled 20 reads (30160 bases, 62600 events) in 28.1761329174s (wall time)
+    Run network:  10.19 ( 2.960 kb/s,  6.143 kev/s)
+    Decoding:     16.13 ( 1.870 kb/s,  3.881 kev/s)
+    $
+    $ OMP_NUM_THREADS=1 nanonetcall more_sample_data/ --jobs 2 >/dev/null
+    Basecalled 20 reads (30160 bases, 62600 events) in 14.3247690201s (wall time)
+    Run network:  10.38 ( 2.907 kb/s,  6.033 kev/s)
+    Decoding:     16.11 ( 1.872 kb/s,  3.885 kev/s)
+    $
+    $ OMP_NUM_THREADS=1 nanonetcall more_sample_data/ --jobs 4 >/dev/null
+    Basecalled 20 reads (30160 bases, 62600 events) in 12.9280588627s (wall time)
+    Run network:  18.68 ( 1.615 kb/s,  3.352 kev/s)
+    Decoding:     29.16 ( 1.034 kb/s,  2.147 kev/s)
+    $
+    $ OMP_NUM_THREADS=1 nanonetcall more_sample_data/ --platforms intel:0:1 --exc_opencl > /dev/null
+    Basecalled 20 reads (30160 bases, 62600 events) in 10.3367981911s (wall time)
+    Run network:   5.54 ( 5.444 kb/s, 11.299 kev/s)
+    Decoding:      2.88 (10.474 kb/s, 21.739 kev/s)
+
+*2D basecalling*
+
+    $ OMP_NUM_THREADS=1 nanonet2d more_sample_data calls
+    Processed 20 reads in 180.179665089s (wall time)
+    Template Run network:  10.15 ( 2.970 kb/s,  6.165 kev/s)
+    Template Decoding:     16.59 ( 1.818 kb/s,  3.773 kev/s)
+    2D calling:           127.52 ( 0.231 kb/s)
+    $
+    $ OMP_NUM_THREADS=1 nanonet2d more_sample_data calls --opencl_2d > /dev/null
+    Processed 20 reads in 80.0777461529s (wall time)
+    Template Run network:  10.15 ( 2.973 kb/s,  6.170 kev/s)
+    Template Decoding:     16.73 ( 1.803 kb/s,  3.742 kev/s)
+    2D calling:            26.19 ( 1.124 kb/s)
+
+
+**E5-2650 v4 @ 2.20GHz (x2, 24 cores total) GTX 1080 Ubuntu 14.04**
+- Timings likely a little off as GPU used by other processes
+- Utilise very little (<200Mb) of GPU memory
+
+*1D basecalling*
+
+    $ nanonetcall more_sample_data/ --platforms nvidia:0:20 --exc_opencl > /dev/null
+    Basecalled 20 reads (30160 bases, 62600 events) in 3.88349485397s (wall time)
+    Run network:   1.32 (22.829 kb/s, 47.384 kev/s)
+    Decoding:      0.91 (33.268 kb/s, 69.051 kev/s)
+
+*2D basecalling*
+
+    $ OMP_NUM_THREADS=1 nanonet2d more_sample_data calls --opencl_2d
+    Processed 20 reads in 56.9682049751s (wall time)
+    Template Run network:  10.10 ( 2.986 kb/s,  6.199 kev/s)
+    Template Decoding:     11.60 ( 2.601 kb/s,  5.398 kev/s)
+    2D calling:            13.30 ( 2.214 kb/s)
+    $
+    $ OMP_NUM_THREADS=1 nanonet2d more_sample_data calls --opencl_2d --jobs 4
+    Processed 20 reads in 15.9661970139s (wall time)
+    Template Run network:  10.19 ( 2.959 kb/s,  6.141 kev/s)
+    Template Decoding:     11.74 ( 2.570 kb/s,  5.334 kev/s)
+    2D calling:            15.96 ( 1.844 kb/s)
+
+
+
 Training a network
 ------------------
 
