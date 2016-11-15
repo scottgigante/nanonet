@@ -11,6 +11,7 @@ import importlib
 import imp
 from ctypes import cdll
 from contextlib import contextmanager
+import pkg_resources
 
 import numpy as np
 from numpy.lib import recfunctions as nprf
@@ -35,6 +36,11 @@ def get_shared_lib(name):
     finally:
         library = cdll.LoadLibrary(lib_file)
     return library
+
+
+def nanonet_resource(filename, subfolder='data'):
+    return pkg_resources.resource_filename('nanonet',
+        os.path.join(subfolder, filename))
 
 
 comp = {

@@ -16,7 +16,7 @@ from functools import partial
 
 from nanonet import decoding, nn, cl
 from nanonet.fast5 import Fast5, iterate_fast5, short_names
-from nanonet.util import random_string, conf_line, FastaWrite, tang_imap, all_nmers, kmers_to_sequence, kmer_overlap, group_by_list, AddFields
+from nanonet.util import random_string, conf_line, FastaWrite, tang_imap, all_nmers, kmers_to_sequence, kmer_overlap, group_by_list, AddFields, nanonet_resource
 from nanonet.cmdargs import FileExist, CheckCPU, AutoBool
 from nanonet.features import make_basecall_input_multi
 from nanonet.jobqueue import JobQueue
@@ -29,6 +29,44 @@ now = timeit.default_timer
 __fast5_analysis_name__ = 'Basecall_RNN_1D'
 __fast5_section_name__ = 'BaseCalled_{}'
 __ETA__ = nn.tiny
+
+__DEFAULTS__ = {
+    'r9.4': {
+        'ed_params': {
+            'window_lengths':[3, 6], 'thresholds':[1.4, 1.1],
+            'peak_height':0.2
+        },
+        'model': nanonet_resource('r9.4_template.npy'),
+        'sloika_model': True,
+    },
+    'r9': {
+        'ed_params': {
+            'window_lengths':[5, 10], 'thresholds':[2.0, 1.1],
+            'peak_height':1.2
+        },
+        'model': nanonet_resource('r9_template.npy'),
+        'sloika_model': False,
+    }
+}
+__DEFAULT_CHEMISTRY__ = 'r9.4'
+
+
+class SetChemistryDefaults(argparse.Action):
+    """Check if the input file exist."""
+
+    def __call__(self, parser, namespace, values, option_string=None):
+        setattr(namespace, self.dest, values)
+        params = __DEFAULTS__[values]
+        for key, value in params.items():
+            setattr(namespace, key, value)
+
+
+class ParseEventDetect(argparse.Action):
+    def __call__(self, parser, namespace, values, option_string=None):
+        setattr(namespace, self.dest, {
+            'window_lengths': values[0:2], 'thresholds': values[2:5],
+            'peak_height': values[5]
+        })
 
 
 def get_parser():
@@ -50,8 +88,18 @@ file, You can obtain one at http://mozilla.org/MPL/2.0/.
         help="Switch to watching folder, argument value used as timeout period.")
     parser.add_argument("--section", default=None, choices=('template', 'complement'),
         help="Section of read for which to produce basecalls, will override that stored in model file.")
+
+    parser.add_argument("--chemistry", choices=__DEFAULTS__.keys(), default=None, action=SetChemistryDefaults,
+        help="Shorthand for selection various analysis parameters.")
+    parser.add_argument("--model", type=str, action=FileExist,
+        default=pkg_resources.resource_filename('nanonet', 'data/default_template.npy'),
+        help="Trained RNN.")
     parser.add_argument("--event_detect", default=True, action=AutoBool,
-        help="Perform event detection, else use existing event data")
+        help="Perform event detection, else use existing event data.")
+    parser.add_argument("--ed_params", default=__DEFAULTS__[__DEFAULT_CHEMISTRY__]['ed_params'],
+        metavar=('window0', 'window1', 'threshold0', 'threshold1', 'peakheight'), nargs=5,
+        action=ParseEventDetect,
+        help="Event detection parameters")
 
     parser.add_argument("--output", type=str,
         help="Output name, output will be in fasta format.")
@@ -65,12 +113,9 @@ file, You can obtain one at http://mozilla.org/MPL/2.0/.
         help="Limit the number of input for processing.")
     parser.add_argument("--min_len", default=500, type=int,
         help="Min. read length (events) to basecall.")
-    parser.add_argument("--max_len", default=15000, type=int,
+    parser.add_argument("--max_len", default=50000, type=int,
         help="Max. read length (events) to basecall.")
 
-    parser.add_argument("--model", type=str, action=FileExist,
-        default=pkg_resources.resource_filename('nanonet', 'data/default_template.npy'),
-        help="Trained ANN.")
     parser.add_argument("--jobs", default=1, type=int, action=CheckCPU,
         help="No of decoding jobs to run in parallel.")
 
@@ -440,7 +485,7 @@ def main():
     fix_kwargs = {a: getattr(args, a) for a in ( 
         'min_len', 'max_len', 'section',
         'event_detect', 'fast_decode',
-        'write_events'
+        'write_events', 'ed_params', 'sloika_model'
     )}
 
     # Define worker functions   

@@ -58,14 +58,14 @@ def scale_array(X, with_mean=True, with_std=True, copy=True):
     return X
 
 
-def events_to_features(events, window=[-1, 0, 1]):
+def events_to_features(events, window=[-1, 0, 1], sloika_model=False):
     """Read events from a .fast5 and return feature vectors.
 
     :param filename: path of file to read.
     :param window: list specifying event offset positions from which to
         derive features. A short centered window is used by default.
     """
-    fg = SquiggleFeatureGenerator(events)
+    fg = SquiggleFeatureGenerator(events, sloika_model=sloika_model)
     for pos in window:
         fg.add_mean_pos(pos)
         fg.add_sd_pos(pos)
@@ -75,7 +75,8 @@ def events_to_features(events, window=[-1, 0, 1]):
     return X
 
 
-def make_basecall_input_multi(fast5_files, section='template', window=[-1, 0, 1], trim=10, min_len=1000, max_len=9000, event_detect=True):
+def make_basecall_input_multi(fast5_files, section='template', window=[-1, 0, 1], trim=10, min_len=1000, max_len=9000,
+    event_detect=True, ed_params={'window_lengths':[3, 6], 'thresholds':[1.4, 1.1], 'peak_height':0.2}, sloika_model=False):
     """Like the above, but doesn't yields directly events. The point here is to
     be fully consistent with the currennt interface but allow use of the python
     library
@@ -86,15 +87,13 @@ def make_basecall_input_multi(fast5_files, section='template', window=[-1, 0, 1]
                 # These parameters make no sense to me, but hey-ho
                 # TODO: expose to user
                 events = minknow_event_detect(
-                    fh.get_read(raw=True), fh.sample_rate,
-                    window_lengths=[5, 10], thresholds=[2.0, 1.1],
-                    peak_height=1.2
+                    fh.get_read(raw=True), fh.sample_rate, **ed_params
                 )
             else:
                 events = fh.get_read()
             events, _ = segment(events, section=section) 
         try:
-            X = events_to_features(events, window=window)
+            X = events_to_features(events, window=window, sloika_model=sloika_model)
         except TypeError:
             continue
         try:
@@ -260,7 +259,7 @@ def make_currennt_training_input_multi(fast5_files, netcdf_file, window=[-1, 0, 
 
 
 class SquiggleFeatureGenerator(object):
-    def __init__(self, events, labels=None):
+    def __init__(self, events, labels=None, sloika_model=False):
         """Feature vector generation from events.
 
         :param events: standard event array.
@@ -275,12 +274,18 @@ class SquiggleFeatureGenerator(object):
         self.features = {}
         self.feature_order = []
 
-        # Augment events 
-        for field in ('mean', 'stdv', 'length',):
-            scale_array(self.events[field], copy=False)
-        delta = np.ediff1d(self.events['mean'], to_begin=0)
-        scale_array(delta, with_mean=False, copy = False)
-        self.events = nprf.append_fields(self.events, 'delta', delta)
+        # Augment events
+        if sloika_model:
+            delta = np.abs(np.ediff1d(events['mean'], to_end=0))
+            self.events = nprf.append_fields(events, 'delta', delta)
+            for field in ('mean', 'stdv', 'length', 'delta'):
+                scale_array(self.events[field], copy=False)
+        else:
+            for field in ('mean', 'stdv', 'length',):
+                scale_array(self.events[field], copy=False)
+            delta = np.ediff1d(self.events['mean'], to_begin=0)
+            scale_array(delta, with_mean=False, copy = False)
+            self.events = nprf.append_fields(self.events, 'delta', delta)
  
     def to_numpy(self):
         out = np.empty((len(self.events), len(self.feature_order)))
