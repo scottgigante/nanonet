@@ -113,7 +113,7 @@ To test your installation several .fast5 files are provided in the
 `sample_data` folder of the source distribution, as a concrete example the
 command:
 
-    nanonetcall --jobs 5 sample_data > basecalls.fa
+    nanonetcall --jobs 5 --chemistry r9 sample_data > basecalls.fa
 
 will produced output along the following lines:
 
@@ -197,7 +197,7 @@ Performing 2D basecalling currently requires use of a distinct program from the 
 basecaller. The interface of this program is much the same as `nanonetcall`, for example
 a basic use would simply require:
 
-    nanonet2d sample_data calls
+    nanonet2d --chemistry r9 sample_data calls
     
 The second option here specifies a prefix for output fasta files; three files will be
 created: one each for template, complement and 2D basecalls.
@@ -222,7 +222,7 @@ the `pyopencl` documentation:
 Once you have the `pyopencl` examples working you should be able to run the accelerated
 version of 1D basecalling:
 
-    nanonetcall sample_data --platforms <VENDOR:DEVICE:1> --exc_opencl
+    nanonetcall --chemistry r9 --platforms <VENDOR:DEVICE:1> --exc_opencl sample_data
 
 where `VENDOR` and `DEVICE` will be machine dependent. To see available devices you can
 examine the output of:
@@ -243,7 +243,7 @@ components during the setup of nanonet by using the `opencl2d` argument:
 With a working OpenCL runtime and development environment 2D basecalling can be accelerated
 by simply adding and option on the commandline:
 
-    nanonet2d sample_data calls --opencl_2d
+    nanonet2d --opencl_2d --chemistry r9 sample_data calls
     
 The program will automatically choose an OpenCL device to use, giving preference
 to GPU devices over CPU ones. It is not currently possible to use OpenCL acceleration for

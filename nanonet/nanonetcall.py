@@ -45,6 +45,8 @@ __DEFAULTS__ = {
             'peak_height':1.2
         },
         'model': nanonet_resource('r9_template.npy'),
+        'template_model': nanonet_resource('r9_template.npy'),
+        'complement_model': nanonet_resource('r9_complement.npy'),
         'sloika_model': False,
     }
 }
@@ -94,6 +96,8 @@ file, You can obtain one at http://mozilla.org/MPL/2.0/.
     parser.add_argument("--model", type=str, action=FileExist,
         default=pkg_resources.resource_filename('nanonet', 'data/default_template.npy'),
         help="Trained RNN.")
+    parser.add_argument("--sloika_model", action='store_true', default=False,
+        help="Use sloika style feature normalization.")
     parser.add_argument("--event_detect", default=True, action=AutoBool,
         help="Perform event detection, else use existing event data.")
     parser.add_argument("--ed_params", default=__DEFAULTS__[__DEFAULT_CHEMISTRY__]['ed_params'],
@@ -182,6 +186,7 @@ def process_read(modelfile, fast5, min_prob=1e-5, trans=None, for_2d=False, writ
         else:
             fname, features, _ = it.next()
     except Exception as e:
+        print str(e)
         return None
 
     # Run network
