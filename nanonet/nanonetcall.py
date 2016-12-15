@@ -21,6 +21,9 @@ from nanonet.cmdargs import FileExist, CheckCPU, AutoBool
 from nanonet.features import make_basecall_input_multi
 from nanonet.jobqueue import JobQueue
 
+import warnings
+warnings.simplefilter("ignore")
+
 import logging
 logger = logging.getLogger('caller-1d')
 
@@ -197,6 +200,8 @@ def process_read(modelfile, fast5, min_prob=1e-5, trans=None, for_2d=False, writ
 
     # Manipulate posterior matrix
     post, good_events = clean_post(post, network.meta['kmers'], min_prob)
+    if post is None:
+        return None
 
     # Decode kmers
     t0 = now()

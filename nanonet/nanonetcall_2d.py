@@ -15,7 +15,6 @@ import numpy as np
 from functools import partial
 import logging
 
-
 from multiprocessing.pool import ThreadPool as Pool
 
 from nanonet.fast5 import Fast5, iterate_fast5, short_names
@@ -24,6 +23,10 @@ from nanonet.cmdargs import FileExist, CheckCPU, AutoBool
 from nanonet.nanonetcall import process_read as process_read_1d
 from nanonet.nanonetcall import form_basecall, __DEFAULTS__, __DEFAULT_CHEMISTRY__, SetChemistryDefaults, ParseEventDetect
 from nanonet.caller_2d.caller_2d import call_2d
+
+import warnings
+warnings.simplefilter("ignore")
+
 
 now = timeit.default_timer
 
