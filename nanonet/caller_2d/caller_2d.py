@@ -22,17 +22,16 @@ from nanonet.caller_2d.align_kmers import align_basecalls
 from nanonet.nanonetcall import get_qdata, form_basecall
 
 logger = logging.getLogger(__name__)
+try:
+    from nanonet.caller_2d.viterbi_2d_ocl import viterbi_2d_ocl
+except ImportError as e:
+    viterbi_2d_ocl = None
 
 def init_opencl_device(cpu_id=0):
     logger.debug('Attempting to initialise and choose OpenCL device.')
-    try:
-        from nanonet.caller_2d.viterbi_2d_ocl import viterbi_2d_ocl
-    except ImportError as e:
-        logger.error('Tried to init opencl device but viterbi_2d_ocl has not been imported.')
-        return None
-    else:
-        logger.debug('Successfully imported viterbi_2d_ocl.')
 
+    if viterbi_2d_ocl is None:
+        logger.error('Cannot init OpenCL device, viterbi_2d_ocl has not been imported.')
     proxy_cl = viterbi_2d_ocl.proxyCL()
 
     vendors, error = proxy_cl.available_vendors()
@@ -508,7 +507,7 @@ def call_2d(posts, kmers, transitions, allkmers, call_band=15, chunk_size=500, u
             posts, transitions, alignment, allkmers, call_band=call_band,
             chunk_size=chunk_size, use_opencl=use_opencl, cpu_id=cpu_id)
     except Exception as e:
-        logger.debug('Failed to perform 2D call.')
+        logger.debug('Failed to perform 2D call: {}.'.format(e))
         raise failed_call
 
     return sequence, out_kmers, out_align, trimmed_align
