@@ -3,6 +3,7 @@ import os
 import time
 from itertools import tee, imap, izip, izip_longest, product, cycle, islice, chain, repeat
 from functools import partial
+import traceback
 from multiprocessing import Pool
 import random
 import string
@@ -448,6 +449,15 @@ def try_except_pass(func, recover=None, recover_fail=False):
     return partial(_try_except_pass, func, recover=recover, recover_fail=recover_fail)
 
 
+def except_functor(function, *args, **kwargs):
+    """Wrapper for worker functions, running under multiprocessing, to better
+    display tracebacks when the functions raise exceptions."""
+    try:
+        return function(*args, **kwargs)
+    except:
+        raise Exception("".join(traceback.format_exception(*sys.exc_info())))
+
+
 class __NotGiven(object):
     def __init__(self):
         """Some horrible voodoo"""
@@ -492,6 +502,8 @@ def tang_imap(
 
     if pass_exception:
         my_function = try_except_pass(my_function, recover=recover, recover_fail=recover_fail)
+    else:
+        my_function = partial(except_functor, my_function)
 
     if threads == 1:
         for r in imap(my_function, args):
