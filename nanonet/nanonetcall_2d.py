@@ -13,6 +13,8 @@ import pkg_resources
 import itertools
 import numpy as np
 from functools import partial
+import logging
+
 
 from multiprocessing.pool import ThreadPool as Pool
 
@@ -23,13 +25,11 @@ from nanonet.nanonetcall import process_read as process_read_1d
 from nanonet.nanonetcall import form_basecall, __DEFAULTS__, __DEFAULT_CHEMISTRY__, SetChemistryDefaults, ParseEventDetect
 from nanonet.caller_2d.caller_2d import call_2d
 
-import warnings
-warnings.simplefilter("ignore")
-
 now = timeit.default_timer
 
 __fast5_analysis_name__ = 'Basecall_RNN_2D'
 
+logger = logging.getLogger('caller-2d')
 
 def get_parser():
     parser = argparse.ArgumentParser(
@@ -102,6 +102,7 @@ def process_read_sections(fast5, modelfiles, jobs=2, **kwargs):
     #    TODO: improve scheduling of template, complement and 2D. Here we
     #          simply use a thread pool to give a small benefit (python code
     #          still subject to GIL)
+    logger.debug('Starting 1D calls for read {}.'.format(fast5))
     sections = ('template', 'complement')
     results = []
     worker = partial(process_read_1d, **kwargs)
@@ -114,7 +115,7 @@ def process_read_sections(fast5, modelfiles, jobs=2, **kwargs):
             results.append(None)
     pool.close()
     pool.join()
-    print "done"
+    logger.debug('Finished 1D calls for read {}.'.format(fast5))
     return {s:r for s, r in zip(sections, results)}
 
 
@@ -132,9 +133,9 @@ def process_read_2d(modelfiles, fast5, min_prob=1e-5, trans=None, write_events=T
     results = process_read_sections(fast5, modelfiles, jobs=2, **kwargs)
     if any(v is None for v in results.values()):
         results['2d'] = None
-        print "skipping 2D because 1d bad"
+        logger.info('Skipping 2D because 1d bad for read {}.'.format(fast5))
     else:
-        print "attempting 2D"
+        logger.debug('Starting 2D basecall for read {}.'.format(fast5))
         posts = [results[x][2][0] for x in sections]
         kmers = [results[x][2][1] for x in sections]
         transitions = [results[x][2][2].tolist() for x in sections]
@@ -146,7 +147,7 @@ def process_read_2d(modelfiles, fast5, min_prob=1e-5, trans=None, write_events=T
                 posts, kmers, transitions, allkmers, call_band=10, chunk_size=500, use_opencl=opencl_2d, cpu_id=0)
             time_2d = now() - t0
         except Exception as e:
-            print str(e)
+            logger.debug('Exception from call_2d(): {}'.format(str(e)))
             results['2d'] = None
         else:
             sequence, qstring, out_kmers, out_align = results_2d
@@ -178,6 +179,10 @@ def main():
     if len(sys.argv) == 1:
         sys.argv.append("-h")
     args = get_parser().parse_args()
+    
+    logging.basicConfig(format='[%(asctime)s - %(name)s] %(message)s', datefmt='%H:%M:%S', level=logging.DEBUG)
+    #logging.disable('root')
+    logging.info('Starting 2D basecalling.')
  
     modelfiles = {
         'template': os.path.abspath(args.template_model),

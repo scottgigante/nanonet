@@ -11,6 +11,7 @@ indicating that the 1st event of the first sequence aligns to the 1st
 in the second, -1 indicating the corresponding event in the other
 sequences does not have a partner.
 """
+import logging
 
 import os
 import numpy as np
@@ -20,20 +21,23 @@ from nanonet.util import all_kmers, rc_kmer, kmers_to_sequence, kmer_overlap
 from nanonet.caller_2d.align_kmers import align_basecalls
 from nanonet.nanonetcall import get_qdata, form_basecall
 
-try:
-    from nanonet.caller_2d.viterbi_2d_ocl import viterbi_2d_ocl
-except ImportError:
-    viterbi_2d_ocl = None
-
+logger = logging.getLogger(__name__)
 
 def init_opencl_device(cpu_id=0):
-    if viterbi_2d_ocl is None:
+    logger.debug('Attempting to initialise and choose OpenCL device.')
+    try:
+        from nanonet.caller_2d.viterbi_2d_ocl import viterbi_2d_ocl
+    except ImportError as e:
+        logger.error('Tried to init opencl device but viterbi_2d_ocl has not been imported.')
         return None
+    else:
+        logger.debug('Successfully imported viterbi_2d_ocl.')
+
     proxy_cl = viterbi_2d_ocl.proxyCL()
 
     vendors, error = proxy_cl.available_vendors()
     if error or not vendors:
-        print "Error establishes OpenCL vendors"
+        logger.error('Error establishing OpenCL vendors.')
         return None
 
     # Initially choose the first vendor from the list.
@@ -53,13 +57,13 @@ def init_opencl_device(cpu_id=0):
             active_vendor = opencl_vendor.apple
     ret, error = proxy_cl.select_vendor(active_vendor)
     if not ret or error:
-         print "Error selecting OpenCL vendor"
+         logger.error('Error selecting OpenCL vendor.')
          return None
     opencl_device_type = viterbi_2d_ocl.device_type
 
     devices, error = proxy_cl.available_devices()
     if error or not devices:
-        print "Error establishes OpenCL devices"
+        logger.error('Error establishing OpenCL devices.')
         return None
 
     if len(devices) == 1:
@@ -68,8 +72,9 @@ def init_opencl_device(cpu_id=0):
             #print "Selected OpenCL device:", devices[0].type, devices[0].name # TODO: remove or log to log file.
             ret, error = proxy_cl.create_context()
             if not ret or error:
-                print "Error creating context for device"
+                logger.error('Error creating context for OpenCL device {}.'.format(devices[0].name))
                 return None
+            logger.debug('Chosen OpenCL device: {}.'.format(devices[0].name))
             return proxy_cl
     else:
         # Give priority to gpu, then cpu, then whatever else is available.
@@ -82,8 +87,9 @@ def init_opencl_device(cpu_id=0):
                 # TODO: remove or log to log file.
                 ret, error = proxy_cl.create_context()
                 if not ret or error:
-                    print "Error creating context for device"
+                    logger.error('Error creating context for GPU device with ID {}.'.format(dev_lst[device_to_use]))
                     return None
+                logger.debug('Chosen GPU OpenCL device: {}.'.format(devices[device_to_use].name))
                 return proxy_cl
 
         dev_lst = [device_info.id for device_info in devices if device_info.type == opencl_device_type.cpu]
@@ -93,18 +99,22 @@ def init_opencl_device(cpu_id=0):
                 #print "Selected OpenCL device:", devices[0].type, devices[0].name # TODO: remove or log to log file
                 ret, error = proxy_cl.create_context()
                 if not ret or error:
-                    print "Error creating context for device."
+                    logger.error('Error creating context for CPU device with ID {}.'.format(dev_lst[device_to_use]))
                     return None
+                logger.debug('Chosen CPU OpenCL device: {}.'.format(devices[device_to_use].name))
                 return proxy_cl
+
         ret, error = proxy_cl.select_device(devices[0].id)
         if ret and not error:
             #print "Selected OpenCL device:", devices[0].type, devices[0].name # TODO: remove or log to log file
             ret, error = proxy_cl.create_context()
             if not ret or error:
-                print "Error creating context for device."
+                logger.error('Error creating context for generic device {}.'.format(devices[0].name))
                 return None
+            logger.debug('Chosen generic OpenCL device: {}.'.format(devices[0].name))
             return proxy_cl
 
+    logger.error('Could not init any OpenCL device.')
     return None
 
 
@@ -261,6 +271,7 @@ def call_aligned_pair(posts, transitions, alignment, allkmers, call_band=15,
     if use_opencl:
         proxy_cl = init_opencl_device(cpu_id)
         if not proxy_cl:
+            logger.critical('Requested 2D basecall with OpenCL but not OpenCL device could be initialised.')
             return None
  
     # Prepare models and transitions for the viterbi_2d code.
@@ -304,6 +315,7 @@ def call_aligned_pair(posts, transitions, alignment, allkmers, call_band=15,
             enable_fp64 = False
             ret, error = viterbi.init_cl(src_kernel_dir, bin_kernel_dir, enable_fp64, num_states, work_group_size)
             if not ret or error:
+                logger.critical('Could not initialise 2D-basecall OpenCL kernel.')
                 return None
 
     alignment_overlap = max(int(1.5 * call_band), 20)
@@ -361,6 +373,7 @@ def call_aligned_pair(posts, transitions, alignment, allkmers, call_band=15,
         # Need to check for nonsense calls, indicated by mostly stays in the basecall.
         sequence = kmers_to_sequence(chunk_kmers)
         if len(sequence) < len(align_in) / 3:
+            logger.warning('Large number of stays detected in 2D basecall, aborting.')
             return None
 
         merged_qdata = make_aligned_qdata(post1, post2, chunk_align_out, allkmers)
@@ -386,6 +399,7 @@ def call_aligned_pair(posts, transitions, alignment, allkmers, call_band=15,
                 pos -= 1
         if pos < len(chunk_align_out) and pos < chunk_size / 2:
             # Chunking has failed. Return null object to indicate this.
+            logger.warning('Failed to traceback through 2D basecall chunk, aborting.')
             return None
        
         if chunk != num_chunks - 1:
@@ -479,13 +493,14 @@ def call_2d(posts, kmers, transitions, allkmers, call_band=15, chunk_size=500, u
     failed_alignment = RuntimeError('Failed to align template and complement basecalls.')
     failed_call = RuntimeError('Failed to produce 2D call.')
 
-
     try:
         alignment, score = align_basecalls(*kmers)
     except Exception as e:
+        logger.debug('Failed to align 1D kmercalls.')
         raise failed_alignment
     else:
         if alignment is None:
+            logger.debug('Failed to successfully align 1D kmercalls.')
             raise failed_alignment
 
     try:
@@ -493,8 +508,8 @@ def call_2d(posts, kmers, transitions, allkmers, call_band=15, chunk_size=500, u
             posts, transitions, alignment, allkmers, call_band=call_band,
             chunk_size=chunk_size, use_opencl=use_opencl, cpu_id=cpu_id)
     except Exception as e:
+        logger.debug('Failed to perform 2D call.')
         raise failed_call
 
     return sequence, out_kmers, out_align, trimmed_align
-
 

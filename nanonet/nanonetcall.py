@@ -21,8 +21,8 @@ from nanonet.cmdargs import FileExist, CheckCPU, AutoBool
 from nanonet.features import make_basecall_input_multi
 from nanonet.jobqueue import JobQueue
 
-import warnings
-warnings.simplefilter("ignore")
+import logging
+logger = logging.getLogger('caller-1d')
 
 now = timeit.default_timer
 
@@ -174,6 +174,7 @@ def process_read(modelfile, fast5, min_prob=1e-5, trans=None, for_2d=False, writ
     :param **kwargs: kwargs of make_basecall_input_multi
     """
     #sys.stderr.write("CPU process\n processing {}\n".format(fast5))
+    logger.debug('Starting 1D call for {} section of {}.'.format(kwargs['section'], fast5))
 
     network = np.load(modelfile).item()
     kwargs['window'] = network.meta['window']
