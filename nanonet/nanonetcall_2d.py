@@ -94,6 +94,9 @@ file, You can obtain one at http://mozilla.org/MPL/2.0/.
     parser.add_argument("--fast_decode", action=AutoBool, default=False,
         help="Use simple, fast decoder with no transition estimates.")
 
+    parser.add_argument("--debug", action=AutoBool, default=False,
+        help="Enabled logging.")
+
     return parser
 
 
@@ -181,7 +184,8 @@ def main():
     args = get_parser().parse_args()
     
     logging.basicConfig(format='[%(asctime)s - %(name)s] %(message)s', datefmt='%H:%M:%S', level=logging.DEBUG)
-    #logging.disable('root')
+    if not args.debug:
+        logging.disable('root')
     logging.info('Starting 2D basecalling.')
  
     modelfiles = {
