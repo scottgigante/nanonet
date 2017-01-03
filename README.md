@@ -78,7 +78,7 @@ Most of these documentation assume you are using this compiler on Windows. The
 section **Compiling with MinGW-w64** explains how to use GCC based compilation
 on Windows.
 
-**Optional Components**
+**Optional Watcher Component**
 
 Nanonet contains an optional component to watch a filesystem for read files as
 they are produced by MinKnow. This feature is not installed by default. To
@@ -91,11 +91,6 @@ from the source directory, or simply
     pip install watchdog
 
 for any location. This will allow use of the `--watch` option of the basecaller.
-
-The read simulation module contains some further dependencies which are not
-installed by default. To install these run:
-
-    pip install -e .[simulate]
 
 
 Peforming basecalling
@@ -457,36 +452,6 @@ as in the example.
 
 Training is an intensive process, even on a GPU expect it to take hours not
 minutes. It is not recommended to attempt training models without GPU support.
-
-
-Data Simulation
----------------
-
-Nanonet contains a squiggle simulator based on a similar Markov model to that
-which can be used for basecalling. The simulation process is largely the reverse
-to that used in performing basecalling. A base sequence is first converted to
-a sequence of overlapping kmers and is currupted by movement artefacts. Event mean
-and standard deviations are drawn from appropriate distributions and can be used
-to simulated raw data. Additional curruptions and correlations can be added to
-the resultant signals.
-
-The simulator is setup with default parameters which largely reflect experimental
-data at the time of writing. Naturally the simulation produces samples which are
-more easily modelled than real-life data. 
-
-To simulate squiggles corresponding to a shotgun 1D library one can run
-something like 
-
-    simulate_minion template_median68pA.model ecoli.fasta simulated_reads \
-        --replicates 1000 --frag_len 8000 500 --raw --event_detect
-
-The first argument here is a text file containing emission parameters for kmers.
-Examples can be obtained from
-
-    https://github.com/nanoporetech/kmer_models
-
-The second and third arguments are simply a reference file from which to generate
-fragments and an output directory.
 
 
 Trouble Shooting

@@ -28,6 +28,7 @@ class Fast5(h5py.File):
     """
     __base_analysis__ = '/Analyses'
     __event_detect_name__ = 'EventDetection'
+    __default_event_path__ = 'Reads'
     __raw_path__ = '/Raw/Reads'
     __raw_name_old__ = 'RawData'
     __raw_path_old__ = '{}/{}/'.format(__base_analysis__, __raw_name_old__)
@@ -36,9 +37,6 @@ class Fast5(h5py.File):
     __channel_meta_path__ = '/UniqueGlobalKey/channel_id'
     __tracking_id_path__ = 'UniqueGlobalKey/tracking_id'
     __context_tags_path__ = 'UniqueGlobalKey/context_tags'
-
-    __default_event_path__ = 'Reads'
-
 
     __default_basecall_2d_analysis__ = 'Basecall_2D'
     __default_basecall_1d_analysis__ = 'Basecall_1D'
@@ -111,7 +109,7 @@ class Fast5(h5py.File):
             cls.__add_attrs(h, channel_id, cls.__channel_meta_path__)
 
         # return instance from new file
-        return cls(fname, read)
+        return cls(fname, read, update=False)
 
     def _add_attrs(self, data, location, convert=None):
         """Convenience method for adding attrs to a possibly new group.
@@ -380,10 +378,8 @@ class Fast5(h5py.File):
                 )
             )
 
-        event_group = self.get_analysis_new(self.__event_detect_name__)
-        event_path = self._join_path(event_group, self.__default_event_path__)
         path = self._join_path(
-            event_path, 'Read_{}'.format(meta['read_number'])
+            self.__event_path__, 'Read_{}'.format(meta['read_number'])
         )
         self._add_attrs(meta, path)
 
