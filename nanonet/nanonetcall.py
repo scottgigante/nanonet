@@ -213,7 +213,7 @@ def process_read(modelfile, fast5, min_prob=1e-5, trans=None, for_2d=False, writ
             bases = network.meta['bases']
         except KeyError:
             # Not all models will have saved bases in meta
-            bases = ['A','G','C','T']
+            bases = ['A','C','G','T']
         score, states = decoding.decode_profile(post, trans=np.log(__ETA__ + trans), bases=bases, log=False)
     decode_time = now() - t0
 
