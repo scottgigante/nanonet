@@ -140,6 +140,7 @@ def main():
     mod_meta['n_features'] = n_features
     mod_meta['kmers'] = out_kmers
     mod_meta['window'] = args.window
+    mod_meta['bases'] = args.bases
 
     modelfile = os.path.abspath(os.path.join(
         args.workspace, 'input_model.jsn'
