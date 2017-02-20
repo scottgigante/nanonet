@@ -20,7 +20,7 @@ _STEP_FACTOR = np.log(_NSTEP)
 _SKIP_FACTOR = np.log(_NSKIP)
 
 
-def decode_profile(post, trans=None, bases=['A', 'C', 'G', 'T'], log=False, slip=0.0):
+def decode_profile(post, trans=None, nbases=4, log=False, slip=0.0):
     """  Viterbi-style decoding with per-event transition weights
     (profile)
     :param post: posterior probabilities of kmers by event.
@@ -28,8 +28,7 @@ def decode_profile(post, trans=None, bases=['A', 'C', 'G', 'T'], log=False, slip
     per-transition log-scaled weights. None == no transition weights.
     :param log: Posterior probabilities are in log-space.
     """
-    dibases = [b1 + b2 for b1 in bases for b2 in bases]
-    nstep = len(bases)
+    nstep = nbases
     nskip = nstep ** 2
     step_factor = np.log(nstep)
     skip_factor = np.log(nskip)
