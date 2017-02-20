@@ -167,6 +167,12 @@ def list_opencl_platforms():
             print '    Global Memory: {:.0f} GB'.format(device.global_mem_size/1073741824.0)
     print
 
+def get_n_bases(kmers):
+    bases = []
+    for kmer in kmers:
+        if kmer[0] not in bases and kmer != 'X' * len(kmer):
+            bases.append(kmer[0])
+    return len(bases)
 
 def process_read(modelfile, fast5, min_prob=1e-5, trans=None, for_2d=False, write_events=True, fast_decode=False, **kwargs):
     """Run neural network over a set of fast5 files
@@ -209,7 +215,7 @@ def process_read(modelfile, fast5, min_prob=1e-5, trans=None, for_2d=False, writ
         score, states = decoding.decode_homogenous(post, log=False)
     else:
         trans = decoding.fast_estimate_transitions(post, trans=trans)
-        score, states = decoding.decode_profile(post, trans=np.log(__ETA__ + trans), log=False)
+        score, states = decoding.decode_profile(post, trans=np.log(__ETA__ + trans), nbases=get_n_bases(network.meta['kmers']), log=False)
     decode_time = now() - t0
 
     # Form basecall
@@ -378,6 +384,8 @@ def process_read_opencl(modelfile, pa, fast5_list, min_prob=1e-5, trans=None, wr
 
     network = np.load(modelfile).item()
     kwargs['window'] = network.meta['window']
+    if get_n_bases(network.meta['kmers']) != 4:
+        raise NotImplementedError("OpenCL does not currently support more than four bases, try running on CPU only.")
 
     # Get features
     try:

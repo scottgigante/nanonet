@@ -20,7 +20,7 @@ _STEP_FACTOR = np.log(_NSTEP)
 _SKIP_FACTOR = np.log(_NSKIP)
 
 
-def decode_profile(post, trans=None, log=False, slip=0.0):
+def decode_profile(post, trans=None, nbases=4, log=False, slip=0.0):
     """  Viterbi-style decoding with per-event transition weights
     (profile)
     :param post: posterior probabilities of kmers by event.
@@ -28,6 +28,11 @@ def decode_profile(post, trans=None, log=False, slip=0.0):
     per-transition log-scaled weights. None == no transition weights.
     :param log: Posterior probabilities are in log-space.
     """
+    nstep = nbases
+    nskip = nstep ** 2
+    step_factor = np.log(nstep)
+    skip_factor = np.log(nskip)
+
     nstate = post.shape[1]
     lpost = post.copy()
     if not log:
@@ -38,8 +43,8 @@ def decode_profile(post, trans=None, log=False, slip=0.0):
         trans = itertools.repeat(np.zeros(3))
     else:
         trans = np.copy(trans)
-        trans[:,1] -= _STEP_FACTOR
-        trans[:,2] -= _SKIP_FACTOR
+        trans[:,1] -= step_factor
+        trans[:,2] -= skip_factor
 
     log_slip = np.log(_ETA + slip)
 
@@ -57,17 +62,17 @@ def decode_profile(post, trans=None, log=False, slip=0.0):
         iscore = np.where(score > scoreNew, iscore, iscoreNew)
         score = np.fmax(score, scoreNew)
         # Step
-        pscore = pscore.reshape((_NSTEP, -1))
+        pscore = pscore.reshape((nstep, -1))
         nrem = pscore.shape[1]
-        scoreNew = np.repeat(np.amax(pscore, axis=0), _NSTEP) + ev_trans[1]
-        iscoreNew = np.repeat(nrem * np.argmax(pscore, axis=0) + range(nrem), _NSTEP)
+        scoreNew = np.repeat(np.amax(pscore, axis=0), nstep) + ev_trans[1]
+        iscoreNew = np.repeat(nrem * np.argmax(pscore, axis=0) + range(nrem), nstep)
         iscore = np.where(score > scoreNew, iscore, iscoreNew)
         score = np.fmax(score, scoreNew)
         # Skip
-        pscore = pscore.reshape((_NSKIP, -1))
+        pscore = pscore.reshape((nskip, -1))
         nrem = pscore.shape[1]
-        scoreNew = np.repeat(np.amax(pscore, axis=0), _NSKIP) + ev_trans[2]
-        iscoreNew = np.repeat(nrem * np.argmax(pscore, axis=0) + range(nrem), _NSKIP)
+        scoreNew = np.repeat(np.amax(pscore, axis=0), nskip) + ev_trans[2]
+        iscoreNew = np.repeat(nrem * np.argmax(pscore, axis=0) + range(nrem), nskip)
         iscore = np.where(score > scoreNew, iscore, iscoreNew)
         score = np.fmax(score, scoreNew)
         # Store
