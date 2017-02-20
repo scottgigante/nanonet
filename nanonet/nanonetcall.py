@@ -167,7 +167,7 @@ def list_opencl_platforms():
 
 def get_n_bases(kmers):
     bases = []
-    for kmer in network.meta['kmers']:
+    for kmer in kmers:
         if kmer[0] not in bases and kmer != 'X' * len(kmer):
             bases.append(kmer[0])
     return len(bases)
