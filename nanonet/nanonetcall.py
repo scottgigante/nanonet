@@ -168,7 +168,7 @@ def list_opencl_platforms():
     print
 
 
-def process_read(modelfile, fast5, min_prob=1e-5, trans=None, for_2d=False, write_events=True, fast_decode=False, **kwargs):
+def process_read(modelfile, fast5, min_prob=1e-5, trans=None, for_2d=False, write_events=True, fast_decode=False, nbases=4, **kwargs):
     """Run neural network over a set of fast5 files
 
     :param modelfile: neural network specification.
@@ -209,11 +209,7 @@ def process_read(modelfile, fast5, min_prob=1e-5, trans=None, for_2d=False, writ
         score, states = decoding.decode_homogenous(post, log=False)
     else:
         trans = decoding.fast_estimate_transitions(post, trans=trans)
-        bases = []
-        for kmer in network.meta['kmers']:
-            if kmer[0] not in bases and kmer != 'X' * len(kmer):
-                bases.append(kmer[0])
-        score, states = decoding.decode_profile(post, trans=np.log(__ETA__ + trans), nbases=len(bases), log=False)
+        score, states = decoding.decode_profile(post, trans=np.log(__ETA__ + trans), nbases=nbases, log=False)
     decode_time = now() - t0
 
     # Form basecall
@@ -370,7 +366,7 @@ def write_to_file(fast5, events, section, seq, qual, good_events, kmer_path, kme
            fh._join_path(base, 'Fastq'))
 
         
-def process_read_opencl(modelfile, pa, fast5_list, min_prob=1e-5, trans=None, write_events=True, fast_decode=False, **kwargs):
+def process_read_opencl(modelfile, pa, fast5_list, min_prob=1e-5, trans=None, write_events=True, fast_decode=False, nbases=4, **kwargs):
     """Run neural network over a set of fast5 files
 
     :param modelfile: neural network specification.
@@ -379,6 +375,8 @@ def process_read_opencl(modelfile, pa, fast5_list, min_prob=1e-5, trans=None, wr
     :param **kwargs: kwargs of make_basecall_input_multi
     """
     #sys.stderr.write("OpenCL process\n processing {}\n{}\n".format(fast5_list, pa.__dict__))
+	if nbases != 4:
+	    raise NotImplementedError("OpenCL does not currently support more than four bases, try running on CPU only.")
 
     network = np.load(modelfile).item()
     kwargs['window'] = network.meta['window']
@@ -483,6 +481,15 @@ def main():
         except:
             sys.stderr.write("No 'section' found in modelfile, try specifying --section.\n")
             sys.exit(1)
+    # Extract number of bases from model kmers
+	bases = []
+    for kmer in network.meta['kmers']:
+        if kmer[0] not in bases and kmer != 'X' * len(kmer):
+            bases.append(kmer[0])
+    nbases=len(bases)
+	if args.platforms is not None:
+	    sys.stderr.write("OpenCL does not currently support more than four bases, try running on CPU only.\n")
+        sys.exit(1)
             
     #TODO: handle case where there are pre-existing files.
     if args.watch is not None:
@@ -502,6 +509,7 @@ def main():
         'event_detect', 'fast_decode',
         'write_events', 'ed_params', 'sloika_model'
     )}
+    fix_kwargs['nbases'] = nbases
 
     # Define worker functions   
     workers = []
