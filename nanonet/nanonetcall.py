@@ -77,11 +77,9 @@ class ParseEventDetect(argparse.Action):
 def get_parser():
     parser = argparse.ArgumentParser(
         description="""A 1D RNN basecaller for Oxford Nanopore data.
-
 This software is subject to the terms of the Mozilla Public
 License, v. 2.0. If a copy of the MPL was not distributed with this
 file, You can obtain one at http://mozilla.org/MPL/2.0/.
-
 (c) 2016 Oxford Nanopore Technologies Ltd.
 """,
         formatter_class=argparse.ArgumentDefaultsHelpFormatter
@@ -167,10 +165,15 @@ def list_opencl_platforms():
             print '    Global Memory: {:.0f} GB'.format(device.global_mem_size/1073741824.0)
     print
 
+def get_n_bases(kmers):
+    bases = []
+    for kmer in network.meta['kmers']:
+        if kmer[0] not in bases and kmer != 'X' * len(kmer):
+            bases.append(kmer[0])
+    return len(bases)
 
-def process_read(modelfile, fast5, min_prob=1e-5, trans=None, for_2d=False, write_events=True, fast_decode=False, nbases=4, **kwargs):
+def process_read(modelfile, fast5, min_prob=1e-5, trans=None, for_2d=False, write_events=True, fast_decode=False, **kwargs):
     """Run neural network over a set of fast5 files
-
     :param modelfile: neural network specification.
     :param fast5: read file to process
     :param post_only: return only the posterior matrix
@@ -209,7 +212,7 @@ def process_read(modelfile, fast5, min_prob=1e-5, trans=None, for_2d=False, writ
         score, states = decoding.decode_homogenous(post, log=False)
     else:
         trans = decoding.fast_estimate_transitions(post, trans=trans)
-        score, states = decoding.decode_profile(post, trans=np.log(__ETA__ + trans), nbases=nbases, log=False)
+        score, states = decoding.decode_profile(post, trans=np.log(__ETA__ + trans), nbases=get_n_bases(network.meta['kmers']), log=False)
     decode_time = now() - t0
 
     # Form basecall
@@ -366,20 +369,19 @@ def write_to_file(fast5, events, section, seq, qual, good_events, kmer_path, kme
            fh._join_path(base, 'Fastq'))
 
         
-def process_read_opencl(modelfile, pa, fast5_list, min_prob=1e-5, trans=None, write_events=True, fast_decode=False, nbases=4, **kwargs):
+def process_read_opencl(modelfile, pa, fast5_list, min_prob=1e-5, trans=None, write_events=True, fast_decode=False, **kwargs):
     """Run neural network over a set of fast5 files
-
     :param modelfile: neural network specification.
     :param fast5: read file to process
     :param post_only: return only the posterior matrix
     :param **kwargs: kwargs of make_basecall_input_multi
     """
     #sys.stderr.write("OpenCL process\n processing {}\n{}\n".format(fast5_list, pa.__dict__))
-	if nbases != 4:
-	    raise NotImplementedError("OpenCL does not currently support more than four bases, try running on CPU only.")
 
     network = np.load(modelfile).item()
     kwargs['window'] = network.meta['window']
+    if get_n_bases(network.meta['kmers']) != 4:
+        raise NotImplementedError("OpenCL does not currently support more than four bases, try running on CPU only.")
 
     # Get features
     try:
@@ -481,15 +483,6 @@ def main():
         except:
             sys.stderr.write("No 'section' found in modelfile, try specifying --section.\n")
             sys.exit(1)
-    # Extract number of bases from model kmers
-	bases = []
-    for kmer in network.meta['kmers']:
-        if kmer[0] not in bases and kmer != 'X' * len(kmer):
-            bases.append(kmer[0])
-    nbases=len(bases)
-	if args.platforms is not None:
-	    sys.stderr.write("OpenCL does not currently support more than four bases, try running on CPU only.\n")
-        sys.exit(1)
             
     #TODO: handle case where there are pre-existing files.
     if args.watch is not None:
@@ -509,7 +502,6 @@ def main():
         'event_detect', 'fast_decode',
         'write_events', 'ed_params', 'sloika_model'
     )}
-    fix_kwargs['nbases'] = nbases
 
     # Define worker functions   
     workers = []
