@@ -331,7 +331,7 @@ def form_basecall(qdata, kmers, states, qscore_correction=None):
 def _contribute(scores, qdata, posmap, n_bases):
      kmerlen = len(posmap)
      for kmer_pos, seq_pos in enumerate(posmap):
-         index = (kmerlen - kmer_pos - 1) * n_bases
+         index = kmer_pos * n_bases
          scores[seq_pos, :] += qdata[index:index + n_bases]
      return
 
