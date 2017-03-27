@@ -22,21 +22,21 @@ def get_parser():
         description="A simple ANN training wrapper.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
-    
+
     parser.add_argument("--train", action=FileExist,
         help="Input training data, either a path to fast5 files or a single netcdf file", required=True)
     parser.add_argument("--train_list", action=FileExist, default=None,
         help="Strand list constaining training set")
     parser.add_argument("--section", default='template', choices=('template', 'complement'),
         help="Section of reads to train")
-    
+
     parser.add_argument("--val", action=FileExist,
         help="Input validation data, either a path to fast5 files or a single netcdf file", required=True)
     parser.add_argument("--val_list", action=FileExist, default=None,
         help="Strand list constaining validation set")
     parser.add_argument("--workspace", default=tempfile.gettempdir(),
         help="Path for storing training and validation NetCDF files, if not specified a temporary file is used.")
-    
+
     parser.add_argument("--output", help="Output prefix", required=True)
 
     parser.add_argument("--model", action=FileExist,
@@ -53,7 +53,7 @@ def get_parser():
         help="Use CUDA acceleration.")
     parser.add_argument("--window", type=int, nargs='+', default=[-1, 0, 1],
         help="The detailed list of the entire window.")
-    
+
     training_parameter_group = parser.add_argument_group("Training Parameters.")
     training_parameter_group.add_argument("--max_epochs", type=int, default=500,
         help="Max training epocs, default 500")
@@ -74,28 +74,28 @@ def get_parser():
 
 
 def prepare_input_file(in_out, **kwargs):
-    path, in_list, output = in_out 
+    path, in_list, output = in_out
 
     print "Creating training data NetCDF: {}".format(output)
     fast5_files = list(iterate_fast5(path, paths=True, strand_list=in_list))
     return make_currennt_training_input_multi(
-        fast5_files=fast5_files, 
+        fast5_files=fast5_files,
         netcdf_file=output,
         **kwargs
     )
 
 
 def main():
-    if len(sys.argv) == 1: 
+    if len(sys.argv) == 1:
         sys.argv.append("-h")
     args = get_parser().parse_args()
 
     if not args.cuda:
         args.nseqs = 1
-   
+
     if not os.path.exists(args.workspace):
         os.makedirs(args.workspace)
- 
+
     # file names for training
     tag = random_string()
     modelfile  = os.path.abspath(args.model)
@@ -106,9 +106,9 @@ def main():
     config_name = os.path.abspath(os.path.join(
         args.workspace, 'nn_{}.cfg'.format(tag)
     ))
-    
+
     # Create currennt training input files
-    trainfile = '{}{}'.format(temp_name, 'train.netcdf') 
+    trainfile = '{}{}'.format(temp_name, 'train.netcdf')
     valfile = '{}{}'.format(temp_name, 'validation.netcdf')
     inputs = (
         (args.train, args.train_list, trainfile),
@@ -178,10 +178,20 @@ def main():
         currennt_cfg.write(conf_line("shuffle_fractions", "false"))
         currennt_cfg.write(conf_line("shuffle_sequences", "true"))
         currennt_cfg.write(conf_line("autosave_best", "true"))
-    
+
+    # autosave metadata in case currennt crashes or is terminated
+    meta_name = "{}.meta.jsn".format(best_network_prefix)
+    print "Saving metadata as {}".format(meta_name)
+    json.dump(mod_meta, open(meta_name, 'w'))
+
     # run currennt
     print "\n\nRunning currennt with: {}".format(config_name)
     run_currennt_noisy(config_name, device=args.device)
+    try:
+        run_currennt_noisy(config_name, device=args.device)
+    except KeyboardInterrupt:
+        # in case the user exits currennt, still save the numpy network
+        pass
 
     # Currennt won't pass through our meta in the model, amend the output
     # and write out a numpy version of the network
@@ -195,8 +205,8 @@ def main():
     print "Transforming network to numpy pickle: {}".format(best_network_numpy)
     mod = network_to_numpy(mod)
     np.save(best_network_numpy, mod)
-        
+
 
 
 if __name__ == '__main__':
-    main() 
+    main()
