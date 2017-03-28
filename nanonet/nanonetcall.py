@@ -221,7 +221,7 @@ def process_read(modelfile, fast5, min_prob=1e-5, trans=None, for_2d=False, writ
     # Form basecall
     kmers = [x for x in network.meta['kmers'] if 'X' not in x]
     qdata = get_qdata(post, kmers)
-    seq, qual, kmer_path = form_basecall(qdata, kmers, states, qscore_correction=kwargs['section'])
+    seq, qual, kmer_path = form_basecall(qdata, kmers, states)
 
     # Write events table
     if write_events:
