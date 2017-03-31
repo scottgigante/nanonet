@@ -123,8 +123,9 @@ def main():
         'threads':args.threads,
         'callback_kwargs':{'section':args.section, 'kmer_len':args.kmer_length}
     }
-    for results in tang_imap(prepare_input_file, inputs, fix_kwargs=fix_kwargs, threads=2):
-        n_chunks, n_features, out_kmers = results
+    for inp in inputs:
+        n_chunks, n_features, out_kmers = prepare_input_file(inp, window=args.window,
+        kmer_len=args.kmer_length, alphabet=args.bases, threads=args.threads, callback_kwargs={'section':args.section, 'kmer_len':args.kmer_length})
         if n_chunks == 0:
             raise RuntimeError("No training data written.")
 

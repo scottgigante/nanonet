@@ -8,7 +8,7 @@ import numpy.lib.recfunctions as nprf
 from nanonet.fast5 import Fast5
 from nanonet.segment import segment
 from nanonet.eventdetection.filters import minknow_event_detect
-from nanonet.util import all_nmers
+from nanonet.util import all_nmers, tang_imap
 
 
 def padded_offset_array(array, pos):
@@ -199,6 +199,9 @@ def preprocess_currennt_training_input(f, window=[-1, 0, 1], kmer_len=3, alphabe
             'Could not convert kmer labels to ints in file {}. '
             'Check labels are no longer than {} and contain only {}'.format(f, kmer_len, alphabet)
         )
+    print f
+    print len(X)
+    print len(labels)
     return f, X, labels
 
 def make_currennt_training_input_multi(fast5_files, netcdf_file, window=[-1, 0, 1], kmer_len=3, alphabet='ACGT', chunk_size=1000, min_chunk=900, trim=10, get_events=get_events_ont_mapping, get_labels=get_labels_ont_mapping, threads=2, callback_kwargs={'section':'template', 'kmer_len':3}):
@@ -266,6 +269,9 @@ def make_currennt_training_input_multi(fast5_files, netcdf_file, window=[-1, 0, 
                 continue
             else:
                 f, X, labels = d
+                print f
+                print len(X)
+                print len(labels)
                 print "Adding: {}".format(f)
                 for chunk, (X_chunk, y_chunk) in enumerate(izip(chunker(X, chunk_size), chunker(y, chunk_size))):
                     if len(X_chunk) < min_chunk:
