@@ -158,10 +158,11 @@ def get_labels_ont_mapping(filename, kmer_len=3, section='template'):
         y[~events['good_emission']] = bad_kmer
     return y
 
-def preprocess_currennt_training_input(f, window=[-1, 0, 1], kmer_len=3, alphabet='ACGT', trim=10, get_events=get_events_ont_mapping, get_labels=get_labels_ont_mapping, callback_kwargs={'section':'template', 'kmer_len':3}):
+def preprocess_currennt_training_input(all_kmers, f, window=[-1, 0, 1], kmer_len=3, alphabet='ACGT', trim=10, get_events=get_events_ont_mapping, get_labels=get_labels_ont_mapping, callback_kwargs={'section':'template', 'kmer_len':3}):
     """Prepare data for input to NetCDF from fast5 file.
 
     :param f: .fast5 file to process
+    :param all_kmers: list of kmers in model
     :param window: event window to derive features
     :param kmer_len: length of kmers to learn
     :param alphabet: alphabet of kmers
@@ -199,10 +200,7 @@ def preprocess_currennt_training_input(f, window=[-1, 0, 1], kmer_len=3, alphabe
             'Could not convert kmer labels to ints in file {}. '
             'Check labels are no longer than {} and contain only {}'.format(f, kmer_len, alphabet)
         )
-    print f
-    print len(X)
-    print len(labels)
-    return f, X, labels
+    return f, X, y, labels
 
 def make_currennt_training_input_multi(fast5_files, netcdf_file, window=[-1, 0, 1], kmer_len=3, alphabet='ACGT', chunk_size=1000, min_chunk=900, trim=10, get_events=get_events_ont_mapping, get_labels=get_labels_ont_mapping, threads=2, callback_kwargs={'section':'template', 'kmer_len':3}):
     """Write NetCDF file for training/validation input to currennt.
@@ -237,6 +235,7 @@ def make_currennt_training_input_multi(fast5_files, netcdf_file, window=[-1, 0, 
     kmers.append(bad_kmer)
     all_kmers = {k:i for i,k in enumerate(kmers)}
 
+    fix_args = [all_kmers]
     fix_kwargs = {
         'window' : window,
         'kmer_len' : kmer_len,
@@ -247,7 +246,7 @@ def make_currennt_training_input_multi(fast5_files, netcdf_file, window=[-1, 0, 
         'callback_kwargs' : callback_kwargs,
     }
     fast5_data = tang_imap(preprocess_currennt_training_input, fast5_files,
-                fix_kwargs=fix_kwargs, threads=threads)
+                fix_args=fix_args, fix_kwargs=fix_kwargs, threads=threads)
 
     with Dataset(netcdf_file, "w", format="NETCDF4") as ncroot:
         #Set dimensions
@@ -268,10 +267,7 @@ def make_currennt_training_input_multi(fast5_files, netcdf_file, window=[-1, 0, 
             if d is None:
                 continue
             else:
-                f, X, labels = d
-                print f
-                print len(X)
-                print len(labels)
+                f, X, y, labels = d
                 print "Adding: {}".format(f)
                 for chunk, (X_chunk, y_chunk) in enumerate(izip(chunker(X, chunk_size), chunker(y, chunk_size))):
                     if len(X_chunk) < min_chunk:
