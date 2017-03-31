@@ -2,7 +2,7 @@ import os
 import random
 import string
 from itertools import izip
-import numpy as np 
+import numpy as np
 import numpy.lib.recfunctions as nprf
 
 from nanonet.fast5 import Fast5
@@ -36,7 +36,7 @@ def scale_array(X, with_mean=True, with_std=True, copy=True):
     :param with_mean: center the data before scaling.
     :param with_std: scale the data to unit variance.
     :param copy: copy data (or perform in-place)
-    """    
+    """
     X = np.asarray(X)
     if copy:
         X = X.copy()
@@ -91,7 +91,7 @@ def make_basecall_input_multi(fast5_files, section='template', window=[-1, 0, 1]
                 )
             else:
                 events = fh.get_read()
-            events, _ = segment(events, section=section) 
+            events, _ = segment(events, section=section)
         try:
             X = events_to_features(events, window=window, sloika_model=sloika_model)
         except TypeError:
@@ -119,7 +119,7 @@ def chunker(array, chunk_size):
 
 def get_events_ont_mapping(filename, kmer_len=3, section='template'):
     """Scrape event-alignment data from .fast5
-    
+
     :param filename: input file.
     :param section: template or complement
     """
@@ -158,12 +158,54 @@ def get_labels_ont_mapping(filename, kmer_len=3, section='template'):
         y[~events['good_emission']] = bad_kmer
     return y
 
+def preprocess_currennt_training_input(f, window=[-1, 0, 1], kmer_len=3, alphabet='ACGT', trim=10, get_events=get_events_ont_mapping, get_labels=get_labels_ont_mapping, callback_kwargs={'section':'template', 'kmer_len':3}):
+    """Prepare data for input to NetCDF from fast5 file.
 
-def make_currennt_training_input_multi(fast5_files, netcdf_file, window=[-1, 0, 1], kmer_len=3, alphabet='ACGT', chunk_size=1000, min_chunk=900, trim=10, get_events=get_events_ont_mapping, get_labels=get_labels_ont_mapping, callback_kwargs={'section':'template', 'kmer_len':3}):
+    :param f: .fast5 file to process
+    :param window: event window to derive features
+    :param kmer_len: length of kmers to learn
+    :param alphabet: alphabet of kmers
+    :param trim: no. of feature vectors to trim (from either end)
+    :param get_events: callback to return event data, will be passed .fast5 filename
+    :param get_labels: callback to return event kmer labels, will be passed .fast5 filename
+    :param callback_kwargs: kwargs for both `get_events` and `get_labels`
+    """
+    try: # lot of stuff
+        # Run callbacks to get features and labels
+        X = events_to_features(get_events(f, **callback_kwargs), window=window)
+        labels = get_labels(f, **callback_kwargs)
+    except:
+        print "Skipping: {}".format(f)
+        return None
+
+    try:
+        X = X[trim:-trim]
+        labels = labels[trim:-trim]
+        if len(X) != len(labels):
+            raise RuntimeError('Length of features and labels not equal.')
+    except:
+        print "Skipping: {}".format(f)
+        return None
+
+    try:
+        # convert kmers to ints
+        y = np.fromiter(
+            (all_kmers[k] for k in labels),
+            dtype=np.int16, count=len(labels)
+        )
+    except Exception as e:
+        # Checks for erroneous alphabet or kmer length
+        raise RuntimeError(
+            'Could not convert kmer labels to ints in file {}. '
+            'Check labels are no longer than {} and contain only {}'.format(f, kmer_len, alphabet)
+        )
+    return f, X, labels
+
+def make_currennt_training_input_multi(fast5_files, netcdf_file, window=[-1, 0, 1], kmer_len=3, alphabet='ACGT', chunk_size=1000, min_chunk=900, trim=10, get_events=get_events_ont_mapping, get_labels=get_labels_ont_mapping, threads=2, callback_kwargs={'section':'template', 'kmer_len':3}):
     """Write NetCDF file for training/validation input to currennt.
 
     :param fast5_list: list of .fast5 files to process
-    :param netcdf_file: output .netcdf file 
+    :param netcdf_file: output .netcdf file
     :param window: event window to derive features
     :param kmer_len: length of kmers to learn
     :param alphabet: alphabet of kmers
@@ -172,6 +214,7 @@ def make_currennt_training_input_multi(fast5_files, netcdf_file, window=[-1, 0, 
     :param trim: no. of feature vectors to trim (from either end)
     :param get_events: callback to return event data, will be passed .fast5 filename
     :param get_labels: callback to return event kmer labels, will be passed .fast5 filename
+    :param threads: number of threads to use for data preparation
     :param callback_kwargs: kwargs for both `get_events` and `get_labels`
     """
     from netCDF4 import Dataset
@@ -184,12 +227,24 @@ def make_currennt_training_input_multi(fast5_files, netcdf_file, window=[-1, 0, 
     inputPattSize = X.shape[1]
     if len(X) != len(labels):
         raise RuntimeError('Length of features and labels not equal.')
-    
+
     # Our state labels are kmers plus a junk kmer
     kmers = all_nmers(kmer_len, alpha=alphabet)
     bad_kmer = 'X'*kmer_len
     kmers.append(bad_kmer)
     all_kmers = {k:i for i,k in enumerate(kmers)}
+
+    fix_kwargs = {
+        'window' : window,
+        'kmer_len' : kmer_len,
+        'alphabet' : alphabet,
+        'trim' : trim,
+        'get_events' : get_events,
+        'get_labels' : get_labels,
+        'callback_kwargs' : callback_kwargs,
+    }
+    fast5_data = tang_imap(preprocess_currennt_training_input, fast5_files,
+                fix_kwargs=fix_kwargs, threads=threads)
 
     with Dataset(netcdf_file, "w", format="NETCDF4") as ncroot:
         #Set dimensions
@@ -206,36 +261,11 @@ def make_currennt_training_input_multi(fast5_files, netcdf_file, window=[-1, 0, 
         targetClasses = ncroot.createVariable("targetClasses", 'i4', ("numTimesteps",))
 
         chunks_written = 0
-        for i, f in enumerate(fast5_files):
-            try: # lot of stuff
-                # Run callbacks to get features and labels
-                X = events_to_features(get_events(f, **callback_kwargs), window=window)
-                labels = get_labels(f, **callback_kwargs)
-            except:
-                print "Skipping: {}".format(f)
+        for i, d in enumerate(fast5_data):
+            if d is None:
                 continue
-
-            try:   
-                X = X[trim:-trim]
-                labels = labels[trim:-trim]
-                if len(X) != len(labels):
-                    raise RuntimeError('Length of features and labels not equal.')
-            except:
-                print "Skipping: {}".format(f)
-
-            try:
-                # convert kmers to ints
-                y = np.fromiter(
-                    (all_kmers[k] for k in labels),
-                    dtype=np.int16, count=len(labels)
-                )
-            except Exception as e:
-                # Checks for erroneous alphabet or kmer length
-                raise RuntimeError(
-                    'Could not convert kmer labels to ints in file {}. '
-                    'Check labels are no longer than {} and contain only {}'.format(f, kmer_len, alphabet)
-                )
             else:
+                f, X, labels = d
                 print "Adding: {}".format(f)
                 for chunk, (X_chunk, y_chunk) in enumerate(izip(chunker(X, chunk_size), chunker(y, chunk_size))):
                     if len(X_chunk) < min_chunk:
@@ -286,7 +316,7 @@ class SquiggleFeatureGenerator(object):
             delta = np.ediff1d(self.events['mean'], to_begin=0)
             scale_array(delta, with_mean=False, copy = False)
             self.events = nprf.append_fields(self.events, 'delta', delta)
- 
+
     def to_numpy(self):
         out = np.empty((len(self.events), len(self.feature_order)))
         for j, key in enumerate(self.feature_order):

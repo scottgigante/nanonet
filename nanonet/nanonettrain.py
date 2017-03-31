@@ -53,6 +53,8 @@ def get_parser():
         help="Use CUDA acceleration.")
     parser.add_argument("--window", type=int, nargs='+', default=[-1, 0, 1],
         help="The detailed list of the entire window.")
+    parser.add_argument("--threads", type=int, default=2,
+        help="Number of threads to use during data preparation.")
 
     training_parameter_group = parser.add_argument_group("Training Parameters.")
     training_parameter_group.add_argument("--max_epochs", type=int, default=500,
@@ -118,6 +120,7 @@ def main():
         'window':args.window,
         'kmer_len':args.kmer_length,
         'alphabet':args.bases,
+        'threads':args.threads,
         'callback_kwargs':{'section':args.section, 'kmer_len':args.kmer_length}
     }
     for results in tang_imap(prepare_input_file, inputs, fix_kwargs=fix_kwargs, threads=2):
