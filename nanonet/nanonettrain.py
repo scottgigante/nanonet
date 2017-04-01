@@ -84,6 +84,35 @@ def prepare_input_file(in_out, **kwargs):
         **kwargs
     )
 
+def prepare_config_file(config_name, config_args):
+    # currennt cfg files
+    with open(config_name, 'w') as currennt_cfg:
+        if not config_args['cuda']:
+            currennt_cfg.write(conf_line('cuda', 'false'))
+        # IO
+        currennt_cfg.write(conf_line("cache_path", config_args['cache_path']))
+        currennt_cfg.write(conf_line("network", config_args['modelfile']))
+        currennt_cfg.write(conf_line("train_file", config_args['trainfile']))
+        currennt_cfg.write(conf_line("val_file", config_args['valfile']))
+        currennt_cfg.write(conf_line("save_network", config_args['final_network']))
+        currennt_cfg.write(conf_line("autosave_prefix", config_args['best_network_prefix']))
+        # Tunable parameters
+        currennt_cfg.write(conf_line("max_epochs", config_args['max_epochs']))
+        currennt_cfg.write(conf_line("max_epochs_no_best", config_args['max_epochs_no_best']))
+        currennt_cfg.write(conf_line("validate_every", config_args['validate_every']))
+        currennt_cfg.write(conf_line("parallel_sequences", config_args['parallel_sequences']))
+        currennt_cfg.write(conf_line("learning_rate", config_args['learning_rate']))
+        currennt_cfg.write(conf_line("momentum", config_args['momentum']))
+        # Fixed parameters
+        currennt_cfg.write(conf_line("train", "true"))
+        currennt_cfg.write(conf_line("weights_dist", "normal"))
+        currennt_cfg.write(conf_line("weights_normal_sigma", "0.1"))
+        currennt_cfg.write(conf_line("weights_normal_mean", "0"))
+        currennt_cfg.write(conf_line("stochastic", "true"))
+        currennt_cfg.write(conf_line("input_noise_sigma", "0.0"))
+        currennt_cfg.write(conf_line("shuffle_fractions", "false"))
+        currennt_cfg.write(conf_line("shuffle_sequences", "true"))
+        currennt_cfg.write(conf_line("autosave_best", "true"))
 
 def main():
     if len(sys.argv) == 1:
@@ -150,34 +179,22 @@ def main():
     best_network_prefix = "{}_auto".format(outputfile)
     # currennt appends some bits here
 
-    # currennt cfg files
-    with open(config_name, 'w') as currennt_cfg:
-        if not args.cuda:
-            currennt_cfg.write(conf_line('cuda', 'false'))
-        # IO
-        currennt_cfg.write(conf_line("cache_path", args.cache_path))
-        currennt_cfg.write(conf_line("network", modelfile))
-        currennt_cfg.write(conf_line("train_file", trainfile))
-        currennt_cfg.write(conf_line("val_file", valfile))
-        currennt_cfg.write(conf_line("save_network", final_network))
-        currennt_cfg.write(conf_line("autosave_prefix", best_network_prefix))
-        # Tunable parameters
-        currennt_cfg.write(conf_line("max_epochs", args.max_epochs))
-        currennt_cfg.write(conf_line("max_epochs_no_best", args.max_epochs_no_best))
-        currennt_cfg.write(conf_line("validate_every", args.validate_every))
-        currennt_cfg.write(conf_line("parallel_sequences", args.parallel_sequences))
-        currennt_cfg.write(conf_line("learning_rate", args.learning_rate))
-        currennt_cfg.write(conf_line("momentum", args.momentum))
-        # Fixed parameters
-        currennt_cfg.write(conf_line("train", "true"))
-        currennt_cfg.write(conf_line("weights_dist", "normal"))
-        currennt_cfg.write(conf_line("weights_normal_sigma", "0.1"))
-        currennt_cfg.write(conf_line("weights_normal_mean", "0"))
-        currennt_cfg.write(conf_line("stochastic", "true"))
-        currennt_cfg.write(conf_line("input_noise_sigma", "0.0"))
-        currennt_cfg.write(conf_line("shuffle_fractions", "false"))
-        currennt_cfg.write(conf_line("shuffle_sequences", "true"))
-        currennt_cfg.write(conf_line("autosave_best", "true"))
+    config_args = {
+        'modelfile' : modelfile,
+        'trainfile' : trainfile,
+        'valfile' : valfile,
+        'final_network' : final_network,
+        'best_network_prefix' : best_network_prefix,
+        'cache_path' : args.cache_path,
+        'max_epochs' : args.max_epochs,
+        'max_epochs_no_best' : args.max_epochs_no_best,
+        'validate_every' : args.validate_every,
+        'parallel_sequences' : args.parallel_sequences,
+        'learning_rate' : args.learning_rate,
+        'momentum' : args.momentum,
+        'cuda' : args.cuda,
+    }
+    prepare_config_file(config_name, config_args)
 
     # autosave metadata in case currennt crashes or is terminated
     meta_name = "{}.meta.jsn".format(best_network_prefix)
@@ -186,12 +203,20 @@ def main():
 
     # run currennt
     print "\n\nRunning currennt with: {}".format(config_name)
-    run_currennt_noisy(config_name, device=args.device)
-    try:
-        run_currennt_noisy(config_name, device=args.device)
-    except KeyboardInterrupt:
-        # in case the user exits currennt, still save the numpy network
-        pass
+    while True:
+        try:
+            run_currennt_noisy(config_name, device=args.device)
+            break
+        except KeyboardInterrupt:
+            # in case the user exits currennt, still save the numpy network
+            break
+        except subprocess.CalledProcessError as e:
+            if e.returncode == 2:
+                # out of memory - try less parallel sequences
+                config_args['parallel_sequences'] = int(0.9*config_args['parallel_sequences'])
+                prepare_config_file(config_name, config_args)
+            else:
+                raise
 
     # Currennt won't pass through our meta in the model, amend the output
     # and write out a numpy version of the network
